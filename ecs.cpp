@@ -6,22 +6,22 @@ namespace BasicECS{
 
     ECS::ECS(){}
 
-    EntityID getRandomEntityID() {
-        // Static random number engine to avoid re-seeding on every call
-        static std::mt19937 rng(std::random_device{}());
-        // Distribution range [0, 2^32 - 1]
-        static std::uniform_int_distribution<std::uint32_t> dist(0, UINT32_MAX);
-        return dist(rng);
+    void ECS::terminate(){
+        for (auto& componentType : componentManager.componentTypes) {
+            runAllComponentCleanUps(&componentType.second, componentType.first);
+        }
     }
 
     ECS& ECS::addEntity(EntityID &entityID){
-        entityID = getRandomEntityID();
 
-        while(entityManager.entities.find(entityID) != entityManager.entities.end()){
-            entityID++;
+        if(!entityManager.tombstoneEntities.empty()){
+            entityID = entityManager.tombstoneEntities.back();
+            entityManager.tombstoneEntities.pop_back();
+            entityManager.entities[entityID] = Entity{};
+        }else{
+            entityManager.entities.push_back(Entity{});
+            entityID = entityManager.entities.size() - 1;
         }
-        
-        entityManager.entities[entityID] = Entity{};
 
         return *this;
     }
@@ -29,11 +29,18 @@ namespace BasicECS{
     ECS& ECS::removeEntity(EntityID entityID){
         Entity *entity = getEntity(entityID);
 
+        std::vector<TypeID> componentsToDelete;
+
         for (const auto& component : entity->components) {
-            removeComponent(entityID, component.first);
+            componentsToDelete.push_back(component.first);
         }
-        
-        entityManager.entities.erase(entityID);
+
+        for(std::size_t i = 0; i < componentsToDelete.size(); i++){
+            removeComponent(entityID, componentsToDelete.at(i));
+        }
+
+        entityManager.tombstoneEntities.push_back(entityID);
+
         return *this;
     }
 
@@ -46,10 +53,10 @@ namespace BasicECS{
         Component *component = getComponent(entity, typeId);
 
         if(component->parent == entityID){
-            componentType->removedComponentIndices.push_back(component->componentIndex);
+            componentType->tombstoneComponents.push_back(component->componentIndex);
                 if(componentType->cleanUpFunc != nullptr){
-                componentType->cleanUpFunc(*this, entityID);
-            }
+                    componentType->cleanUpFunc(*this, entityID);
+                }
         }
 
         entity->components.erase(typeId);
@@ -81,12 +88,24 @@ namespace BasicECS{
     }
 
     ECS::Entity* ECS::getEntity(EntityID entityID){
-        auto entity_it = entityManager.entities.find(entityID);
-        if(entity_it == entityManager.entities.end()){
+        if(entityID >= entityManager.entities.size()){
             std::cerr << "ERROR: No entity with id '" << entityID << "'";
             exit(1);
         }
-        return &entity_it->second;
+        return &entityManager.entities.at(entityID);
+    }
+
+    void ECS::runAllComponentCleanUps(ComponentType *componentType, TypeID typeId){
+        for(std::size_t i = 0; i < componentType->entitiesUsingThis.size(); i++){
+            EntityID entityID = componentType->entitiesUsingThis.at(i);
+            Entity *entity = &entityManager.entities.at(entityID);
+
+            if(entity->components.at(typeId).parent == entityID){
+                if(componentType->cleanUpFunc != nullptr){
+                    componentType->cleanUpFunc(*this, entityID);
+                }
+            }
+        }
     }
 
     void ECS::displayECS(){
@@ -95,7 +114,7 @@ namespace BasicECS{
         for (const auto& entry : componentManager.componentTypes) {
             std::string name = entry.second.name;
             int count = entry.second.entitiesUsingThis.size();
-            int tombStoneCount = entry.second.removedComponentIndices.size();
+            int tombStoneCount = entry.second.tombstoneComponents.size();
 
             std::cout <<  name << ", count: " << count << ", tomb stone count: " << tombStoneCount << "\n";
         }
@@ -103,13 +122,14 @@ namespace BasicECS{
 
         std::cout << "Entities" << "\n" << "========" << "\n";
 
-        for (const auto& entity : entityManager.entities) {
-            if(entity.second.name.empty()){
-                std::cout << entity.first << "\n";
+        for (std::size_t i = 0; i < entityManager.entities.size(); i++) {
+            Entity entity = entityManager.entities.at(i);
+            if(entity.name.empty()){
+                std::cout << i << "\n";
             }else{
-                std::cout << entity.second.name << "\n";
+                std::cout << entity.name << "\n";
             }
-            for (const auto& component : entity.second.components) {
+            for (const auto& component : entity.components) {
                 std::cout << "  " << componentManager.componentTypes.at(component.first).name 
                             << ", index: " << component.second.componentIndex 
                             << ", parent: " << component.second.parent << "\n";

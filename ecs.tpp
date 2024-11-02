@@ -16,7 +16,7 @@ namespace BasicECS{
         componentManager.componentTypes[typeID] = {
             .arrayLocation = new std::vector<T>(),
             .entitiesUsingThis = {},
-            .removedComponentIndices = {},
+            .tombstoneComponents = {},
             .initialiseFunc = initialiseFunc,
             .cleanUpFunc = cleanUpFunc,
             .parseFunc = parseFunc,
@@ -49,10 +49,10 @@ namespace BasicECS{
         void* componentArrLocation = componentType->arrayLocation;
         std::vector<T>* componentArr = static_cast<std::vector<T>*>(componentArrLocation);
 
-        if(!componentType->removedComponentIndices.empty()){
-            std::size_t index = componentType->removedComponentIndices.back();
+        if(!componentType->tombstoneComponents.empty()){
+            std::size_t index = componentType->tombstoneComponents.back();
             componentArr->at(index) = t;
-            componentType->removedComponentIndices.pop_back();
+            componentType->tombstoneComponents.pop_back();
     
             entity->components[typeId] = {.componentIndex = index, .parent = entityID};
         }else{
@@ -103,7 +103,7 @@ namespace BasicECS{
 
         Component *component = getComponent(getEntity(entityID), typeId);
 
-        if(entityManager.entities.find(component->parent) == entityManager.entities.end()){
+        if(entityID >= entityManager.entities.size()){
             std::cout << "ERROR: component parent does not exist for component '" <<  componentType->name << "'\n";
         }
 

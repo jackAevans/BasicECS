@@ -3,10 +3,11 @@
 #include <chrono>
 #include <vector>
 
-uint64_t timeSinceEpochMillisec();
+double timeSinceEpochMillisec();
 
-void testECS(int amount);
-void testControl(int amount);
+void ecsSpeedTest(int amount);
+void controlSpeedTest(int amount);
+void testEcs();
 
 struct Player { // 124 bytes
     int x;
@@ -26,39 +27,88 @@ struct Health {
 };
 
 int main() {
-    testECS(1000000);
-    testControl(1000000);
+    // ecsSpeedTest(1000000);
+    // controlSpeedTest(1000000);
+    testEcs();
 
     return 0;
 }
 
-void testECS(int amount){
+void initPosition(BasicECS::ECS &ecs, BasicECS::EntityID entID){
+    ecs.getComponent<Position>(entID).x = 20;
+    std::cout << "init pos\n"; 
+}
+
+void cleanPosition(BasicECS::ECS &ecs, BasicECS::EntityID entID){
+    ecs.getComponent<Position>(entID).x = 0;
+    std::cout << "clean pos " << entID << "\n"; 
+}
+
+void testEcs(){
     BasicECS::ECS ecs;
 
-    ecs.addComponentType<Position>(nullptr, nullptr, nullptr);
+    ecs.addComponentType<Position>(initPosition, cleanPosition, nullptr);
     ecs.addComponentType<Health>(nullptr, nullptr, nullptr);
 
-    for(int i = 0; i < amount; i++){
-        EntityID testEnt;
-        ecs.addEntity(testEnt)
-            .addComponent<Position>(testEnt, {0, 1, 20})
-            .addComponent<Health>(testEnt, Health{0});
-    }
+    BasicECS::EntityID testEnt;
+    ecs.addEntity(testEnt)
+        .addComponent<Position>(testEnt, {0, 1, 20})
+        .addComponent<Health>(testEnt, Health{0});
 
-    uint64_t startTime = timeSinceEpochMillisec();
+    BasicECS::EntityID testEnt2;
+    ecs.addEntity(testEnt2)
+        .addComponent<Position>(testEnt2, {5, 1, 8})
+        .addComponent<Health>(testEnt2, Health{100});
 
     ecs.forEach<Position, Health>([](Position &pos, Health &health){
         pos.x += 4;
         health.health += 9;
     });
 
-    std::cout << "ECS time: " << timeSinceEpochMillisec() - startTime << "\n";
+    ecs.removeEntity(testEnt);
+
+    BasicECS::EntityID testEnt3;
+    ecs.addEntity(testEnt3)
+        .addComponent<Health>(testEnt3, Health{50});
+
+    ecs.displayECS();
+
+    ecs.terminate();
 
     ecs.removeComponentType<Position>();
     ecs.removeComponentType<Health>();
 }
 
-void testControl(int amount){
+void ecsSpeedTest(int amount){
+    BasicECS::ECS ecs;
+
+    ecs.addComponentType<Position>(nullptr, nullptr, nullptr);
+    ecs.addComponentType<Health>(nullptr, nullptr, nullptr);
+
+    for(int i = 0; i < amount; i++){
+        BasicECS::EntityID testEnt;
+        ecs.addEntity(testEnt)
+            .addComponent<Position>(testEnt, {0, 1, 20});
+
+        if(i%1 == 0){
+            ecs.addComponent<Health>(testEnt, Health{0});
+        }
+    }
+
+    double startTime = timeSinceEpochMillisec();
+
+    ecs.forEach<Health, Position>([]( Health &health, Position &pos){
+        pos.x += 4;
+        health.health += 9;
+    });
+
+    std::cout << "ECS time: " << timeSinceEpochMillisec() - startTime << "ms\n";
+
+    ecs.removeComponentType<Position>();
+    ecs.removeComponentType<Health>();
+}
+
+void controlSpeedTest(int amount){
     std::vector<Player> players;
 
     for(int i = 0; i < amount; i++){
@@ -72,10 +122,11 @@ void testControl(int amount){
         players.at(i).health += 9;
     }
 
-    std::cout << "Control time: "<< timeSinceEpochMillisec() - startTime << "\n";
+    std::cout << "Control time: "<< timeSinceEpochMillisec() - startTime << "ms\n";
 }
 
-uint64_t timeSinceEpochMillisec() {
+double timeSinceEpochMillisec() {
     using namespace std::chrono;
-    return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+    uint64_t nano = duration_cast<nanoseconds>(system_clock::now().time_since_epoch()).count();
+    return (double)nano/(double)1000000;
 }

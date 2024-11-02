@@ -3,10 +3,10 @@
 #include <unordered_map>
 #include <vector>
 
-using TypeID = std::size_t;
-using EntityID = uint32_t;
-
 namespace BasicECS{
+
+    using TypeID = std::size_t;
+    using EntityID = std::size_t;
 
     class ECS{
     public:
@@ -15,6 +15,8 @@ namespace BasicECS{
         using CleanUpFunc = void (*)(ECS &ecs, EntityID entity);
     public:
         ECS();
+
+        void terminate();
 
         template <typename T> void addComponentType(InitialiseFunc initialiseFunc, CleanUpFunc cleanUpFunc, ParseFunc parseFunc);
         template <typename T> void removeComponentType();
@@ -46,7 +48,7 @@ namespace BasicECS{
         struct ComponentType {
             void* arrayLocation;
             std::vector<EntityID> entitiesUsingThis;
-            std::vector<std::size_t> removedComponentIndices;
+            std::vector<std::size_t> tombstoneComponents;
 
             InitialiseFunc initialiseFunc;
             CleanUpFunc cleanUpFunc;
@@ -59,7 +61,8 @@ namespace BasicECS{
             std::unordered_map<std::string, TypeID> typeNamesToTypeIds;
         };
         struct EntityManager{
-            std::unordered_map<EntityID, Entity> entities;
+            std::vector<Entity> entities;
+            std::vector<EntityID> tombstoneEntities;
             std::unordered_map<std::string, EntityID> entityNamesToEntityIds;
         };
 
@@ -69,6 +72,8 @@ namespace BasicECS{
         Entity* getEntity(EntityID entityID);
 
         void removeComponent(EntityID entityID, TypeID typeId);
+
+        void runAllComponentCleanUps(ComponentType *componentType, TypeID typeId);
 
         template <typename T> TypeID getTypeId();
 
