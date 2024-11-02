@@ -37,7 +37,7 @@ namespace BasicECS{
     template <typename T> ECS& ECS::addComponent(EntityID entityID, T t){
         TypeID typeId = getTypeId<T>();
 
-        ComponentType *componentType = getComponentType<T>(typeId);
+        ComponentType *componentType = getComponentType(typeId);
 
         Entity *entity = getEntity(entityID);
 
@@ -72,13 +72,13 @@ namespace BasicECS{
     template <typename T> ECS& ECS::addComponent(EntityID entityID, EntityID parentEntityID){
         TypeID typeId = getTypeId<T>();
 
-        ComponentType *componentType = getComponentType<T>(typeId);
+        ComponentType *componentType = getComponentType(typeId);
 
         Entity *entity = getEntity(entityID);
 
         Entity *parentEntity = getEntity(parentEntityID);
 
-        Component *component = getComponent<T>(parentEntity, typeId);
+        Component *component = getComponent(parentEntity, typeId);
 
         auto component_it = entity->components.find(typeId);
         if(component_it != entity->components.end()){
@@ -92,49 +92,63 @@ namespace BasicECS{
         return *this;
     }
     template <typename T> ECS& ECS::removeComponent(EntityID entityID){
-        TypeID typeId = getTypeId<T>();
-
-        ComponentType *componentType = getComponentType<T>(typeId);
-
-        Entity *entity = getEntity(entityID);
-
-        Component *component = getComponent<T>(entity, typeId);
-
-        if(component->parent == entityID){
-            componentType->removedComponentIndices.push_back(component->componentIndex);
-                if(componentType->cleanUpFunc != nullptr){
-                componentType->cleanUpFunc(*this, entityID);
-            }
-        }
-
-        entity->components.erase(typeId);
-
-        for(int i = 0; i < (int)componentType->entitiesUsingThis.size(); i++){
-            if(componentType->entitiesUsingThis.at(i) == entityID){
-                componentType->entitiesUsingThis.erase(componentType->entitiesUsingThis.begin() + i);
-            }
-        }
-
+        removeComponent(entityID, getTypeId<T>());
         return *this;
     }
 
-    template <typename T> ECS::ComponentType* ECS::getComponentType(TypeID typeId){
-        auto componentType_it = componentManager.componentTypes.find(typeId);
-        if(componentType_it == componentManager.componentTypes.end()){
-            std::cerr << "ERROR: No component of type '" << getTypeName<T>() << "'";
-            exit(1);
+    template <typename T> T& ECS::getComponent(EntityID entityID){
+        TypeID typeId = getTypeId<T>();
+
+        ComponentType *componentType = getComponentType(typeId);
+
+        Component *component = getComponent(getEntity(entityID), typeId);
+
+        if(entityManager.entities.find(component->parent) == entityManager.entities.end()){
+            std::cout << "ERROR: component parent does not exist for component '" <<  componentType->name << "'\n";
         }
-        return &componentType_it->second;
+
+        void* componentArrLocation = componentType->arrayLocation;
+        std::vector<T>* componentArr = static_cast<std::vector<T>*>(componentArrLocation);
+
+        return componentArr->at(component->componentIndex);
     }
 
-    template <typename T> ECS::Component* ECS::getComponent(Entity *entity, TypeID typeId){
-        auto component_it = entity->components.find(typeId);
-        if(component_it == entity->components.end()){
-            ComponentType *componentType = getComponentType<T>(typeId);
-            std::cerr << "ERROR: Entity doesn't contain component of type '" << componentType->name << "'";
-            exit(1);
+    template <typename T> void ECS::forEach(void (*routine)(T &t)){
+        TypeID typeId = getTypeId<T>();
+
+        ComponentType *componentType = getComponentType(typeId);
+
+        void* componentArrLocation = componentType->arrayLocation;
+        std::vector<T>* componentArr = static_cast<std::vector<T>*>(componentArrLocation);
+
+        for(std::size_t i = 0; i < componentArr->size(); i++){
+            routine(componentArr->at(i));
         }
-        return &component_it->second;
+    }
+
+    template <typename T1, typename T2> void ECS::forEach(void (*routine)(T1 &t1, T2 &t2)){
+        TypeID typeId1 = getTypeId<T1>();
+        ComponentType *componentType1 = getComponentType(typeId1);
+        std::vector<T1>* component1Arr = static_cast<std::vector<T1>*>(componentType1->arrayLocation);
+
+        TypeID typeId2 = getTypeId<T2>();
+        ComponentType *componentType2 = getComponentType(typeId2);
+        std::vector<T2>* component2Arr = static_cast<std::vector<T2>*>(componentType2->arrayLocation);
+
+        for(std::size_t i = 0; i < componentType1->entitiesUsingThis.size(); i++){
+
+            EntityID entityID = componentType1->entitiesUsingThis.at(i);
+            Entity *entity = &entityManager.entities.at(entityID);
+
+            auto typeId2_it = entity->components.find(typeId2);
+
+            if(typeId2_it != entity->components.end()){
+                Component component1 = entity->components.at(typeId1);
+                Component component2 = typeId2_it->second;
+
+                routine(component1Arr->at(component1.componentIndex), component2Arr->at(component2.componentIndex));
+            }
+        }
     }
 
     template <typename T> TypeID ECS::getTypeId(){

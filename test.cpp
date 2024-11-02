@@ -9,7 +9,9 @@ void testECS(int amount);
 void testControl(int amount);
 
 struct Player { // 124 bytes
-    uint64_t pos[15];
+    int x;
+    int y;
+    int z;
     float health;
 };
 
@@ -24,8 +26,8 @@ struct Health {
 };
 
 int main() {
-    testECS(1);
-    // testControl(1000000);
+    testECS(1000000);
+    testControl(1000000);
 
     return 0;
 }
@@ -36,16 +38,21 @@ void testECS(int amount){
     ecs.addComponentType<Position>(nullptr, nullptr, nullptr);
     ecs.addComponentType<Health>(nullptr, nullptr, nullptr);
 
-    uint32_t testEnt;
-    ecs.addEntity(testEnt)
-        .addComponent<Position>(testEnt, {1,1,1});
+    for(int i = 0; i < amount; i++){
+        EntityID testEnt;
+        ecs.addEntity(testEnt)
+            .addComponent<Position>(testEnt, {0, 1, 20})
+            .addComponent<Health>(testEnt, Health{0});
+    }
 
-    uint32_t testEnt2;
-    ecs.addEntity(testEnt2)
-        .addComponent<Position>(testEnt2, testEnt)
-        .addComponent<Health>(testEnt2, Health{100});
+    uint64_t startTime = timeSinceEpochMillisec();
 
-    ecs.displayECS();
+    ecs.forEach<Position, Health>([](Position &pos, Health &health){
+        pos.x += 4;
+        health.health += 9;
+    });
+
+    std::cout << "ECS time: " << timeSinceEpochMillisec() - startTime << "\n";
 
     ecs.removeComponentType<Position>();
     ecs.removeComponentType<Health>();
@@ -55,16 +62,17 @@ void testControl(int amount){
     std::vector<Player> players;
 
     for(int i = 0; i < amount; i++){
-        players.push_back({});
+        players.push_back({0, 1, 20});
     }
 
     uint64_t startTime = timeSinceEpochMillisec();
 
     for(int i = 0; i < amount; i++){
-        players.at(i).health ++;
+        players.at(i).x += 4;
+        players.at(i).health += 9;
     }
 
-    std::cout << timeSinceEpochMillisec() - startTime << "\n";
+    std::cout << "Control time: "<< timeSinceEpochMillisec() - startTime << "\n";
 }
 
 uint64_t timeSinceEpochMillisec() {

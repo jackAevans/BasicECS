@@ -9,11 +9,12 @@ using EntityID = uint32_t;
 namespace BasicECS{
 
     class ECS{
-    private:
+    public:
         using ParseFunc = void (*)(ECS &ecs, EntityID entity, std::string line);
         using InitialiseFunc = void (*)(ECS &ecs, EntityID entity);
         using CleanUpFunc = void (*)(ECS &ecs, EntityID entity);
     public:
+        ECS();
 
         template <typename T> void addComponentType(InitialiseFunc initialiseFunc, CleanUpFunc cleanUpFunc, ParseFunc parseFunc);
         template <typename T> void removeComponentType();
@@ -26,6 +27,9 @@ namespace BasicECS{
         template <typename T> ECS& removeComponent(EntityID entityID);
 
         template <typename T> T& getComponent(EntityID entityID);
+
+        template <typename T> void forEach(void (*routine)(T &t));
+        template <typename T1, typename T2> void forEach(void (*routine)(T1 &t1, T2 &t2));
 
         void displayECS();
 
@@ -60,11 +64,14 @@ namespace BasicECS{
         };
 
     private:
-        template <typename T> ComponentType* getComponentType(TypeID typeId);
-        template <typename T> Component* getComponent(Entity *entity, TypeID typeId);
+        ComponentType* getComponentType(TypeID typeId);
+        Component* getComponent(Entity *entity, TypeID typeId);
         Entity* getEntity(EntityID entityID);
 
+        void removeComponent(EntityID entityID, TypeID typeId);
+
         template <typename T> TypeID getTypeId();
+
     private:
         EntityManager entityManager;
         ComponentManager componentManager;

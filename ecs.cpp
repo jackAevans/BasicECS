@@ -4,12 +4,14 @@
 
 namespace BasicECS{
 
-    EntityID getRandomEntityID() {
-        std::random_device rd;
-        std::mt19937 generator(rd());
-        std::uniform_int_distribution<uint32_t> distribution(0, UINT32_MAX);
+    ECS::ECS(){}
 
-        return distribution(generator);
+    EntityID getRandomEntityID() {
+        // Static random number engine to avoid re-seeding on every call
+        static std::mt19937 rng(std::random_device{}());
+        // Distribution range [0, 2^32 - 1]
+        static std::uniform_int_distribution<std::uint32_t> dist(0, UINT32_MAX);
+        return dist(rng);
     }
 
     ECS& ECS::addEntity(EntityID &entityID){
@@ -25,8 +27,57 @@ namespace BasicECS{
     }
 
     ECS& ECS::removeEntity(EntityID entityID){
+        Entity *entity = getEntity(entityID);
+
+        for (const auto& component : entity->components) {
+            removeComponent(entityID, component.first);
+        }
+        
         entityManager.entities.erase(entityID);
         return *this;
+    }
+
+    void ECS::removeComponent(EntityID entityID, TypeID typeId){
+
+        ComponentType *componentType = getComponentType(typeId);
+
+        Entity *entity = getEntity(entityID);
+
+        Component *component = getComponent(entity, typeId);
+
+        if(component->parent == entityID){
+            componentType->removedComponentIndices.push_back(component->componentIndex);
+                if(componentType->cleanUpFunc != nullptr){
+                componentType->cleanUpFunc(*this, entityID);
+            }
+        }
+
+        entity->components.erase(typeId);
+
+        for(std::size_t i = 0; i < componentType->entitiesUsingThis.size(); i++){
+            if(componentType->entitiesUsingThis.at(i) == entityID){
+                componentType->entitiesUsingThis.erase(componentType->entitiesUsingThis.begin() + i);
+            }
+        }
+    }
+
+    ECS::ComponentType* ECS::getComponentType(TypeID typeId){
+        auto componentType_it = componentManager.componentTypes.find(typeId);
+        if(componentType_it == componentManager.componentTypes.end()){
+            std::cerr << "ERROR: component type with id '" << typeId << "' is unknown";
+            exit(1);
+        }
+        return &componentType_it->second;
+    }
+
+    ECS::Component* ECS::getComponent(Entity *entity, TypeID typeId){
+        auto component_it = entity->components.find(typeId);
+        if(component_it == entity->components.end()){
+            ComponentType *componentType = getComponentType(typeId);
+            std::cerr << "ERROR: Entity doesn't contain component of type '" << componentType->name << "'";
+            exit(1);
+        }
+        return &component_it->second;
     }
 
     ECS::Entity* ECS::getEntity(EntityID entityID){
