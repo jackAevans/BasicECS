@@ -2,6 +2,8 @@
 
 #include <unordered_map>
 #include <vector>
+#include <componentMap.hpp>
+#include <functional>
 
 namespace BasicECS{
 
@@ -10,15 +12,19 @@ namespace BasicECS{
 
     class ECS{
     public:
-        using ParseFunc = void (*)(ECS &ecs, EntityID entity, std::string line);
+        using ParseFunc = void (*)(ECS &ecs, EntityID entity, const std::vector<uint8_t> data);
+        using SerializeFunc = std::vector<uint8_t> (*)(ECS &ecs, EntityID entity);
         using InitialiseFunc = void (*)(ECS &ecs, EntityID entity);
         using CleanUpFunc = void (*)(ECS &ecs, EntityID entity);
+
+        using RemoveComponentTypeFunc = void (*)(ECS &ecs);
     public:
         ECS();
 
         void terminate();
+        void saveState(const char* filePath);
 
-        template <typename T> void addComponentType(InitialiseFunc initialiseFunc, CleanUpFunc cleanUpFunc, ParseFunc parseFunc);
+        template <typename T> void addComponentType(InitialiseFunc initialiseFunc, CleanUpFunc cleanUpFunc);
         template <typename T> void removeComponentType();
 
         ECS& addEntity(EntityID &entityID);
@@ -30,8 +36,8 @@ namespace BasicECS{
 
         template <typename T> T& getComponent(EntityID entityID);
 
-        template <typename T> void forEach(void (*routine)(T &t));
-        template <typename T1, typename T2> void forEach(void (*routine)(T1 &t1, T2 &t2));
+        template <typename T> void forEach(std::function<void(T &t)> routine);
+        template <typename T1, typename T2> void forEach(std::function<void(T1 &t1, T2 &t2)> routine);
 
         void displayECS();
 
@@ -42,7 +48,7 @@ namespace BasicECS{
             EntityID parent;
         };
         struct Entity{
-            std::unordered_map<TypeID, Component> components;
+            ComponentMap<Component> components;
             std::string name;
         };
         struct ComponentType {
@@ -53,6 +59,9 @@ namespace BasicECS{
             InitialiseFunc initialiseFunc;
             CleanUpFunc cleanUpFunc;
             ParseFunc parseFunc;
+            SerializeFunc serializeFunc;
+
+            RemoveComponentTypeFunc removeComponentTypeFunc;
 
             std::string name;
         };
@@ -75,7 +84,12 @@ namespace BasicECS{
 
         void runAllComponentCleanUps(ComponentType *componentType, TypeID typeId);
 
+        void pruneEntities();
+        template <typename T> void pruneComponentType();
+
         template <typename T> TypeID getTypeId();
+
+        void forEachEntity(std::function<void(ECS &ecs, EntityID &entity)> routine);
 
     private:
         EntityManager entityManager;

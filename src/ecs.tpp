@@ -9,7 +9,36 @@
 namespace BasicECS{
     template <typename T> std::string getTypeName();
 
-    template <typename T> void ECS::addComponentType(InitialiseFunc initialiseFunc, CleanUpFunc cleanUpFunc, ParseFunc parseFunc){
+    template <typename T> std::vector<uint8_t> serializeComponent_(ECS &ecs, EntityID entity){
+        std::vector<uint8_t> serializedData;
+
+        T& component = ecs.getComponent<T>(entity);
+        uint8_t* componentData = reinterpret_cast<uint8_t*>(&component);
+        serializedData.insert(serializedData.end(), componentData, componentData + sizeof(T));
+
+        return serializedData;
+    }
+
+    template <typename T> void parseComponent_(ECS &ecs, EntityID entity, const std::vector<uint8_t> data){
+        T component;
+
+        // Check if data size matches the expected size for the component type
+        if (data.size() != sizeof(T)) {
+            throw std::runtime_error("Invalid data size for component deserialization.");
+        }
+
+        // Copy the data into the component's memory
+        std::memcpy(&component, data.data(), sizeof(T));
+
+        // Add the component to the entity in ECS
+        ecs.addComponent(entity, component);
+    }
+
+    template <typename T> void removeComponentType_(ECS &ecs){
+        ecs.removeComponentType<T>();
+    }
+
+    template <typename T> void ECS::addComponentType(InitialiseFunc initialiseFunc, CleanUpFunc cleanUpFunc){
         TypeID typeID = getTypeId<T>();
         std::string name = getTypeName<T>();
         
@@ -19,7 +48,9 @@ namespace BasicECS{
             .tombstoneComponents = {},
             .initialiseFunc = initialiseFunc,
             .cleanUpFunc = cleanUpFunc,
-            .parseFunc = parseFunc,
+            .parseFunc = parseComponent_<T>,
+            .serializeFunc = serializeComponent_<T>,
+            .removeComponentTypeFunc = removeComponentType_<T>,
             .name = name
         };
 
@@ -35,14 +66,17 @@ namespace BasicECS{
     }
 
     template <typename T> ECS& ECS::addComponent(EntityID entityID, T t){
+        pruneComponentType<T>();
+
         TypeID typeId = getTypeId<T>();
 
         ComponentType *componentType = getComponentType(typeId);
 
         Entity *entity = getEntity(entityID);
 
-        auto component_it = entity->components.find(typeId);
-        if(component_it != entity->components.end()){
+        Component *component = entity->components.get(typeId);
+        
+        if(component != nullptr){
             removeComponent<T>(entityID);
         }
 
@@ -54,11 +88,11 @@ namespace BasicECS{
             componentArr->at(index) = t;
             componentType->tombstoneComponents.pop_back();
     
-            entity->components[typeId] = {.componentIndex = index, .parent = entityID};
+            entity->components.insert(typeId, {.componentIndex = index, .parent = entityID});
         }else{
             componentArr->push_back(t);
 
-            entity->components[typeId] = {.componentIndex = componentArr->size() - 1, .parent = entityID};
+            entity->components.insert(typeId, {.componentIndex = componentArr->size() - 1, .parent = entityID});
         }
 
         componentType->entitiesUsingThis.push_back(entityID);
@@ -78,14 +112,14 @@ namespace BasicECS{
 
         Entity *parentEntity = getEntity(parentEntityID);
 
-        Component *component = getComponent(parentEntity, typeId);
+        Component component = (Component)*getComponent(parentEntity, typeId);
 
-        auto component_it = entity->components.find(typeId);
-        if(component_it != entity->components.end()){
+        Component *component_it = entity->components.get(typeId);
+        if(component_it != nullptr){
             removeComponent<T>(entityID);
         }
 
-        entity->components[typeId] = *component;
+        entity->components.insert(typeId, component);
 
         componentType->entitiesUsingThis.push_back(entityID);
 
@@ -113,7 +147,7 @@ namespace BasicECS{
         return componentArr->at(component->componentIndex);
     }
 
-    template <typename T> void ECS::forEach(void (*routine)(T &t)){
+    template <typename T> void ECS::forEach(std::function<void(T &t)> routine){
         TypeID typeId = getTypeId<T>();
 
         ComponentType *componentType = getComponentType(typeId);
@@ -121,12 +155,38 @@ namespace BasicECS{
         void* componentArrLocation = componentType->arrayLocation;
         std::vector<T>* componentArr = static_cast<std::vector<T>*>(componentArrLocation);
 
+        std::size_t currentNextTombstoneIndex = 0;
+        std::size_t currentNextTombstone = 0;
+        if(!componentType->tombstoneComponents.empty()){
+            currentNextTombstone = componentType->tombstoneComponents.at(currentNextTombstoneIndex);
+        }
+
+
         for(std::size_t i = 0; i < componentArr->size(); i++){
-            routine(componentArr->at(i));
+            if(i == currentNextTombstone && currentNextTombstoneIndex < componentType->tombstoneComponents.size()){
+                currentNextTombstone = componentType->tombstoneComponents.at(currentNextTombstoneIndex);
+                currentNextTombstoneIndex ++;
+            }else{
+                routine(componentArr->at(i));
+            }
         }
     }
 
-    template <typename T1, typename T2> void ECS::forEach(void (*routine)(T1 &t1, T2 &t2)){
+    // template <typename T> void ECS::forEach(void (*routine)(T &t)){
+    //     TypeID typeId = getTypeId<T>();
+    //     ComponentType *componentType = getComponentType(typeId);
+    //     std::vector<T>* componentArr = static_cast<std::vector<T>*>(componentType->arrayLocation);
+
+    //     for(std::size_t i = 0; i < componentType->entitiesUsingThis.size(); i++){
+    //         EntityID entityID = componentType->entitiesUsingThis.at(i);
+    //         Entity *entity = &entityManager.entities.at(entityID);
+    //         Component *component = entity->components.get(typeId);
+    //         routine(componentArr->at(component->componentIndex));
+    //     }
+
+    // }
+
+    template <typename T1, typename T2> void ECS::forEach(std::function<void(T1 &t1, T2 &t2)> routine){
         TypeID typeId1 = getTypeId<T1>();
         ComponentType *componentType1 = getComponentType(typeId1);
         std::vector<T1>* component1Arr = static_cast<std::vector<T1>*>(componentType1->arrayLocation);
@@ -140,14 +200,36 @@ namespace BasicECS{
             EntityID entityID = componentType1->entitiesUsingThis.at(i);
             Entity *entity = &entityManager.entities.at(entityID);
 
-            auto typeId2_it = entity->components.find(typeId2);
+            Component *component2 = entity->components.get(typeId2);
 
-            if(typeId2_it != entity->components.end()){
-                Component component1 = entity->components.at(typeId1);
-                Component component2 = typeId2_it->second;
+            if(component2 != nullptr){
+                Component *component1 = entity->components.get(typeId1);
 
-                routine(component1Arr->at(component1.componentIndex), component2Arr->at(component2.componentIndex));
+                routine(component1Arr->at(component1->componentIndex), component2Arr->at(component2->componentIndex));
             }
+        }
+    }
+
+    template <typename T> void ECS::pruneComponentType(){
+        TypeID typeId = getTypeId<T>();
+        ComponentType *componentType = getComponentType(typeId);
+        std::vector<T>* componentArr = static_cast<std::vector<T>*>(componentType->arrayLocation);
+
+        if(componentType->tombstoneComponents.empty()){
+            return;
+        }
+
+        std::size_t i = componentType->tombstoneComponents.size() - 1;
+        std::size_t expected = componentArr->size() - 1;
+
+        while(componentType->tombstoneComponents.at(i) == expected){
+            componentArr->pop_back();
+            componentType->tombstoneComponents.pop_back();
+            expected --;
+            if(i <= 0){
+                return;
+            }
+            i --;
         }
     }
 

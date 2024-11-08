@@ -8,11 +8,11 @@ set(EXE_NAME ecsTest)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fdiagnostics-color=always -Wall -g -Wno-deprecated")
 
-include_directories(./) 
+include_directories(./src) 
 
 # Add executable target
 file(GLOB_RECURSE SOURCES
-    ecs.cpp
+    src/*.cpp
     test.cpp
 )
 
