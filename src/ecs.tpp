@@ -38,6 +38,14 @@ namespace BasicECS{
         ecs.removeComponentType<T>();
     }
 
+    template <typename T> void pruneComponentType_(ECS &ecs){
+        ecs.pruneComponentType<T>();
+    }
+
+    template <typename T> Reference<T> ECS::createReference(EntityID entityId){
+        return {getTypeId<T>(), getReference(entityId)};
+    }
+
     template <typename T> void ECS::addComponentType(InitialiseFunc initialiseFunc, CleanUpFunc cleanUpFunc){
         TypeID typeID = getTypeId<T>();
         std::string name = getTypeName<T>();
@@ -51,6 +59,7 @@ namespace BasicECS{
             .parseFunc = parseComponent_<T>,
             .serializeFunc = serializeComponent_<T>,
             .removeComponentTypeFunc = removeComponentType_<T>,
+            .pruneComponentTypeFunc = pruneComponentType_<T>,
             .name = name
         };
 
@@ -66,8 +75,6 @@ namespace BasicECS{
     }
 
     template <typename T> ECS& ECS::addComponent(EntityID entityID, T t){
-        pruneComponentType<T>();
-
         TypeID typeId = getTypeId<T>();
 
         ComponentType *componentType = getComponentType(typeId);
@@ -103,25 +110,15 @@ namespace BasicECS{
 
         return *this;
     }
-    template <typename T> ECS& ECS::addComponent(EntityID entityID, EntityID parentEntityID){
+    template <typename T> ECS& ECS::addComponent(EntityID entityID, ReferenceID parentReferenceID){
         TypeID typeId = getTypeId<T>();
+        auto it = entityManager.referenceToID.find(parentReferenceID);
 
-        ComponentType *componentType = getComponentType(typeId);
-
-        Entity *entity = getEntity(entityID);
-
-        Entity *parentEntity = getEntity(parentEntityID);
-
-        Component component = (Component)*getComponent(parentEntity, typeId);
-
-        Component *component_it = entity->components.get(typeId);
-        if(component_it != nullptr){
-            removeComponent<T>(entityID);
+        if(it != entityManager.referenceToID.end()){
+            addComponent(entityID, it->second, typeId);
+        }else{
+            std::cout << "ERROR: component reference doesn't exist '" <<  parentReferenceID << "'\n";
         }
-
-        entity->components.insert(typeId, component);
-
-        componentType->entitiesUsingThis.push_back(entityID);
 
         return *this;
     }
@@ -145,6 +142,10 @@ namespace BasicECS{
         std::vector<T>* componentArr = static_cast<std::vector<T>*>(componentArrLocation);
 
         return componentArr->at(component->componentIndex);
+    }
+
+    template <typename T> T& ECS::getReferenceComponent(Reference<T> reference){
+        return getComponent<T>(entityManager.referenceToID.at(reference.referenceId));
     }
 
     template <typename T> void ECS::forEach(std::function<void(T &t)> routine){
@@ -171,20 +172,6 @@ namespace BasicECS{
             }
         }
     }
-
-    // template <typename T> void ECS::forEach(void (*routine)(T &t)){
-    //     TypeID typeId = getTypeId<T>();
-    //     ComponentType *componentType = getComponentType(typeId);
-    //     std::vector<T>* componentArr = static_cast<std::vector<T>*>(componentType->arrayLocation);
-
-    //     for(std::size_t i = 0; i < componentType->entitiesUsingThis.size(); i++){
-    //         EntityID entityID = componentType->entitiesUsingThis.at(i);
-    //         Entity *entity = &entityManager.entities.at(entityID);
-    //         Component *component = entity->components.get(typeId);
-    //         routine(componentArr->at(component->componentIndex));
-    //     }
-
-    // }
 
     template <typename T1, typename T2> void ECS::forEach(std::function<void(T1 &t1, T2 &t2)> routine){
         TypeID typeId1 = getTypeId<T1>();

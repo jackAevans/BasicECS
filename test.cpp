@@ -7,6 +7,7 @@ static int allocation_count = 0;
 
 struct Position { float x, y, z; };
 struct Velocity { float dx, dy, dz; };
+struct Body { BasicECS::Reference<Velocity> velocityRef; };
 
 void initialisePosition(BasicECS::ECS &ecs, BasicECS::EntityID entity) { allocation_count ++; }
 void cleanUpPosition(BasicECS::ECS &ecs, BasicECS::EntityID entity) { allocation_count --; }
@@ -21,12 +22,17 @@ void testECS() {
     // Step 2: Register component types
     ecs.addComponentType<Position>(initialisePosition, cleanUpPosition);
     ecs.addComponentType<Velocity>(initialiseVelocity, cleanUpVelocity);
+    ecs.addComponentType<Body>(nullptr, nullptr);
 
     // Step 3: Add and retrieve entities
     BasicECS::EntityID entity1, entity2;
     ecs.addEntity(entity1);
     ecs.addEntity(entity2);
     assert(entity1 != entity2);
+
+    BasicECS::EntityID entity3;
+    ecs.addEntity(entity3)
+        .addComponent<Body>(entity3, {ecs.createReference<Velocity>(entity1)});
 
     // Step 4: Add components to entities
     Position pos1 = {10.0f, 20.0f, 30.0f};
@@ -77,7 +83,10 @@ void testECS() {
         // Expected to fail, Position component does not exist
     }
 
-    ecs.addComponent<Position>(entity1, entity2);
+    ecs.addComponent<Position>(entity1, ecs.getReference(entity2));
+
+    Velocity& retrievedVel2 = ecs.getReferenceComponent(ecs.getComponent<Body>(entity3).velocityRef);
+    assert(retrievedVel2.dx == 12.0f && retrievedVel2.dy == 0.5f && retrievedVel2.dz == -1.0f);
 
     // Final check: display ECS state if displayECS method is available
     ecs.displayECS();
@@ -88,11 +97,38 @@ void testECS() {
 
     // Step 10: Count allocations 
     assert(allocation_count == 0);
+
+    std::cout << "All ECS tests passed successfully." << std::endl;
 }
 
+void loadStateTest(){
+    BasicECS::ECS ecs;
+
+    ecs.addComponentType<Position>(initialisePosition, cleanUpPosition);
+    ecs.addComponentType<Velocity>(initialiseVelocity, cleanUpVelocity);
+    ecs.addComponentType<Body>(nullptr, nullptr);
+
+    ecs.loadState("newState");
+
+    ecs.forEach<Position>([](Position pos){
+        std::cout << pos.x << " " << pos.y << " " << pos.z << std::endl;
+    });
+
+    ecs.forEach<Velocity>([](Velocity velocity){
+        std::cout << velocity.dx << " " << velocity.dy << " " << velocity.dz << std::endl;
+    });
+
+    ecs.displayECS();
+
+    ecs.terminate();
+}
+
+void ecsSpeedTest(int amount);
+
 int main() {
-    testECS();
-    std::cout << "All ECS tests passed successfully." << std::endl;
+    // testECS();
+    // ecsSpeedTest(1000);
+    loadStateTest();
     return 0;
 }
 
