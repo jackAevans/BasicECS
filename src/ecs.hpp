@@ -27,28 +27,26 @@ namespace BasicECS{
         using RemoveComponentTypeFunc = void (*)(ECS &ecs);
         using PruneComponentTypeFunc = void (*)(ECS &ecs);
     public:
-        ECS();
 
         void terminate();
+
         void saveState(const char* filePath);
         void loadState(const char* filePath);
 
         template <typename T> void addComponentType(InitialiseFunc initialiseFunc, CleanUpFunc cleanUpFunc);
         template <typename T> void removeComponentType();
-        template <typename T> void pruneComponentType();
 
         ECS& addEntity(EntityID &entityID);
         ECS& removeEntity(EntityID entityID);
 
         template <typename T> Reference<T> createReference(EntityID entityId);
-        ReferenceID getReference(EntityID entityId);
 
         template <typename T> ECS& addComponent(EntityID entityID, T t);
-        template <typename T> ECS& addComponent(EntityID entityID, ReferenceID parentReferenceID);
+        template <typename T> ECS& addComponent(EntityID entityID, EntityID parentID);
         template <typename T> ECS& removeComponent(EntityID entityID);
 
         template <typename T> T& getComponent(EntityID entityID);
-        template <typename T> T& getReferenceComponent(Reference<T> reference);
+        template <typename T> T& getComponent(Reference<T> reference);
 
         template <typename T> void forEach(std::function<void(T &t)> routine);
         template <typename T1, typename T2> void forEach(std::function<void(T1 &t1, T2 &t2)> routine);
@@ -95,7 +93,7 @@ namespace BasicECS{
         Component* getComponent(Entity *entity, TypeID typeId);
         Entity* getEntity(EntityID entityID);
 
-        void addEntity(EntityID &entityID, ReferenceID &referenceID);
+        void addEntity(EntityID &entityID, ReferenceID referenceID);
 
         void removeComponent(EntityID entityID, TypeID typeId);
 
@@ -104,6 +102,11 @@ namespace BasicECS{
         void runAllComponentCleanUps(ComponentType *componentType, TypeID typeId);
 
         void pruneEntities();
+
+        template <typename T> void pruneComponentList();
+        template <typename T> static void pruneComponentList_(ECS &ecs);
+
+        template <typename T> static void removeComponentType_(ECS &ecs);
 
         template <typename T> TypeID getTypeId();
 

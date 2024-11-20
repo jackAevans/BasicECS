@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cassert>
 #include <ecs.hpp> // Assume your ECS header file is named "ECS.hpp"
+#include <entt.hpp>
 
 // Define some mock components and functions for testing
 static int allocation_count = 0;
@@ -9,11 +10,11 @@ struct Position { float x, y, z; };
 struct Velocity { float dx, dy, dz; };
 struct Body { BasicECS::Reference<Velocity> velocityRef; };
 
-void initialisePosition(BasicECS::ECS &ecs, BasicECS::EntityID entity) { allocation_count ++; }
-void cleanUpPosition(BasicECS::ECS &ecs, BasicECS::EntityID entity) { allocation_count --; }
+void initialisePosition(BasicECS::ECS &ecs, BasicECS::EntityID entity) { allocation_count ++; std::cout << "init pos\n";}
+void cleanUpPosition(BasicECS::ECS &ecs, BasicECS::EntityID entity) { allocation_count --; std::cout << "clean pos\n";}
 
-void initialiseVelocity(BasicECS::ECS &ecs, BasicECS::EntityID entity) { ecs.getComponent<Velocity>(entity).dx = 12; }
-void cleanUpVelocity(BasicECS::ECS &ecs, BasicECS::EntityID entity) { /* No-op for now */ }
+void initialiseVelocity(BasicECS::ECS &ecs, BasicECS::EntityID entity) { ecs.getComponent<Velocity>(entity).dx = 12; std::cout << "init vel\n";}
+void cleanUpVelocity(BasicECS::ECS &ecs, BasicECS::EntityID entity) {std::cout << "clean vel\n";}
 
 void testECS() {
     // Step 1: Create an ECS instance
@@ -30,10 +31,6 @@ void testECS() {
     ecs.addEntity(entity2);
     assert(entity1 != entity2);
 
-    BasicECS::EntityID entity3;
-    ecs.addEntity(entity3)
-        .addComponent<Body>(entity3, {ecs.createReference<Velocity>(entity1)});
-
     // Step 4: Add components to entities
     Position pos1 = {10.0f, 20.0f, 30.0f};
     ecs.addComponent(entity1, pos1);
@@ -44,6 +41,14 @@ void testECS() {
     // Adding only Position component to entity2
     Position pos2 = {15.0f, 25.0f, 35.0f};
     ecs.addComponent(entity2, pos2);
+
+    BasicECS::Reference<Velocity> ref = ecs.createReference<Velocity>(entity1);
+
+    // assert(ref.referenceId == 1);
+
+    BasicECS::EntityID entity3;
+    ecs.addEntity(entity3)
+        .addComponent<Body>(entity3, {ref});
 
     // Step 5: Test getComponent functionality
     Position& retrievedPos1 = ecs.getComponent<Position>(entity1);
@@ -83,9 +88,9 @@ void testECS() {
         // Expected to fail, Position component does not exist
     }
 
-    ecs.addComponent<Position>(entity1, ecs.getReference(entity2));
+    ecs.addComponent<Position>(entity1, entity2);
 
-    Velocity& retrievedVel2 = ecs.getReferenceComponent(ecs.getComponent<Body>(entity3).velocityRef);
+    Velocity& retrievedVel2 = ecs.getComponent(ecs.getComponent<Body>(entity3).velocityRef);
     assert(retrievedVel2.dx == 12.0f && retrievedVel2.dy == 0.5f && retrievedVel2.dz == -1.0f);
 
     // Final check: display ECS state if displayECS method is available
@@ -110,12 +115,10 @@ void loadStateTest(){
 
     ecs.loadState("newState");
 
-    ecs.forEach<Position>([](Position pos){
-        std::cout << pos.x << " " << pos.y << " " << pos.z << std::endl;
-    });
-
-    ecs.forEach<Velocity>([](Velocity velocity){
-        std::cout << velocity.dx << " " << velocity.dy << " " << velocity.dz << std::endl;
+    ecs.forEach<Body>([&ecs](Body body){
+        std::cout << body.velocityRef.referenceId << std::endl;
+        Velocity& retrievedVel2 = ecs.getComponent(body.velocityRef);
+        std::cout << retrievedVel2.dx << std::endl;
     });
 
     ecs.displayECS();
@@ -124,11 +127,13 @@ void loadStateTest(){
 }
 
 void ecsSpeedTest(int amount);
+void enttSpeedTest(int amount);
 
 int main() {
-    // testECS();
-    // ecsSpeedTest(1000);
-    loadStateTest();
+    testECS();
+    // ecsSpeedTest(1000000);
+    // enttSpeedTest(1000000);
+    // loadStateTest();
     return 0;
 }
 
@@ -157,6 +162,26 @@ void ecsSpeedTest(int amount){
     std::cout << "ECS time: " << timeSinceEpochMillisec() - startTime << "ms\n";
     
     ecs.terminate();
+}
+
+void enttSpeedTest(int amount){
+    entt::registry registry;
+
+    for(int i = 0; i < amount; i++){
+        entt::entity entity = registry.create();
+        registry.emplace<Position>(entity, Position{0, 1, 20});
+        registry.emplace<Velocity>(entity, Velocity{0,0,0});
+    }
+
+    double startTime = timeSinceEpochMillisec();
+
+    auto view = registry.view<Velocity>();
+    for(auto entity : view){
+        Velocity& velocity = view.get<Velocity>(entity);
+        velocity.dx += 9;
+    }
+
+    std::cout << "Entt time: " << timeSinceEpochMillisec() - startTime << "ms\n";
 }
 
 // void controlSpeedTest(int amount){

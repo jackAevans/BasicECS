@@ -5,11 +5,8 @@
 
 namespace BasicECS{
 
-    ECS::ECS(){}
-
     void ECS::terminate(){
         for (auto& componentType : componentManager.componentTypes) {
-            runAllComponentCleanUps(&componentType.second, componentType.first);
             componentType.second.removeComponentTypeFunc(*this);
         }
     }
@@ -143,19 +140,13 @@ namespace BasicECS{
 
     ECS& ECS::addEntity(EntityID &entityID){
 
-        ReferenceID referenceID = rand() % 4294967295;
-        while(entityManager.referenceToID.find(referenceID) != entityManager.referenceToID.end()){
-            referenceID ++;
-        }
+        ReferenceID referenceID = 0;
         addEntity(entityID, referenceID);
 
         return *this;
     }
 
-    void ECS::addEntity(EntityID &entityID, ReferenceID &referenceID){
-        while(entityManager.referenceToID.find(referenceID) != entityManager.referenceToID.end()){
-            referenceID ++;
-        }
+    void ECS::addEntity(EntityID &entityID, ReferenceID referenceID){
         Entity entity{.referenceId = referenceID};
 
         if(!entityManager.tombstoneEntities.empty()){
@@ -167,7 +158,14 @@ namespace BasicECS{
             entityID = entityManager.entities.size() - 1;
         }
 
-        entityManager.referenceToID[referenceID] = entityID;
+        if(referenceID != 0){
+            if(entityManager.referenceToID.find(referenceID) != entityManager.referenceToID.end()){
+                std::cerr << "ERROR: referenceId  '" << referenceID << "' already exists\n";
+                throw std::exception();
+            }
+            entityManager.referenceToID[referenceID] = entityID;
+        }
+
     }
 
     ECS& ECS::removeEntity(EntityID entityID){
@@ -189,10 +187,6 @@ namespace BasicECS{
         pruneEntities();
         
         return *this;
-    }
-
-    ReferenceID ECS::getReference(EntityID entityId){
-        return getEntity(entityId)->referenceId;
     }
 
     void ECS::removeComponent(EntityID entityID, TypeID typeId){
@@ -323,7 +317,9 @@ namespace BasicECS{
 
         forEachEntity([](ECS &ecs, EntityID &entityId){ 
             Entity entity = ecs.entityManager.entities.at(entityId);
-            std::cout << "id: " << entityId << " refId: " << entity.referenceId << "\n";
+            std::cout << "id: " << entityId;
+            if(entity.referenceId > 0){std::cout << " refId: " << entity.referenceId;}
+            std::cout <<  "\n";
             entity.components.forEach([&ecs](std::size_t key, Component value){
                 std::cout << "  " << ecs.componentManager.componentTypes.at(key).name 
                             << ", index: " << value.componentIndex 
