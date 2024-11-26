@@ -5,123 +5,30 @@
 
 namespace BasicECS{
 
+    ECS::~ECS(){
+        terminate();
+    }
+
     void ECS::terminate(){
         for (auto& componentType : componentManager.componentTypes) {
             componentType.second.removeComponentTypeFunc(*this);
         }
     }
 
-    void ECS::saveState(const char* filePath){
-        std::ofstream outFile(filePath, std::ios::binary);
-
-        if (!outFile) {
-            std::cerr << "Error opening file for writing!" << std::endl;
-            throw std::exception();
+    void ECS::clear(){
+        for (auto& componentType : componentManager.componentTypes) {
+            runAllComponentDeinitializes(&componentType.second, componentType.first);
+        }
+        for (auto& componentType : componentManager.componentTypes) {
+            componentType.second.clearComponentListFunc(*this);
         }
 
-        uint64_t entityCount = entityManager.entities.size() - entityManager.tombstoneEntities.size();
-        outFile.write(reinterpret_cast<const char*>(&entityCount), sizeof(uint64_t));
-
-        forEachEntity([&outFile](ECS &ecs, EntityID entityId){
-            uint64_t entityIdData = (uint64_t)entityId;
-            outFile.write(reinterpret_cast<const char*>(&entityIdData), sizeof(uint64_t));
-
-            Entity *entity = ecs.getEntity(entityId);
-
-            uint64_t referenceIdData = (uint64_t)entity->referenceId;
-            outFile.write(reinterpret_cast<const char*>(&referenceIdData), sizeof(uint64_t));
-
-            uint64_t componentCount = (uint64_t)entity->components.size;
-            outFile.write(reinterpret_cast<const char*>(&componentCount), sizeof(uint64_t));
-
-            entity->components.forEach([&outFile, entityId, &ecs](std::size_t typeId, Component component){
-                uint64_t typeIdData = (uint64_t)typeId;
-                outFile.write(reinterpret_cast<const char*>(&typeIdData), sizeof(uint64_t)); //8
-
-                ComponentType componentType = ecs.componentManager.componentTypes.at(typeId);
-
-                if(component.parent == entityId){
-                    uint8_t isParent = 1;
-                    outFile.write(reinterpret_cast<const char*>(&isParent), sizeof(uint8_t)); //1
-
-                    std::vector<uint8_t> componentData = componentType.serializeFunc(ecs, entityId);
-                    uint64_t dataLength = componentData.size();
-                    outFile.write(reinterpret_cast<const char*>(&dataLength), sizeof(uint64_t)); //8
-                    outFile.write(reinterpret_cast<const char*>(componentData.data()), componentData.size()); //12
-                }else{
-                    uint8_t isParent = 0;
-                    outFile.write(reinterpret_cast<const char*>(&isParent), sizeof(uint8_t)); //1
-
-                    uint64_t parentData = component.parent;
-                    outFile.write(reinterpret_cast<const char*>(&parentData), sizeof(uint64_t)); //8
-                }
-
-            });
-        });
-
-        outFile.close();
+        entityManager.entities.clear();
+        entityManager.resourceToID.clear();
+        entityManager.tombstoneEntities.clear();
     }
 
-    void ECS::loadState(const char* filePath){
-        std::ifstream inFile(filePath, std::ios::binary);
-
-        if (!inFile) {
-            std::cerr << "Error opening file for reading!" << std::endl;
-            throw std::exception();
-        }
-
-        std::unordered_map<uint64_t, EntityID> entityIdResolution;
-        std::unordered_map<TypeID, std::pair<uint64_t, uint64_t>> parentReferences;
-
-        uint64_t entityCount = 0;
-        inFile.read(reinterpret_cast<char*>(&entityCount), sizeof(uint64_t));
-
-        for(int i = 0; i < entityCount; i++){
-            uint64_t entityIdData = 0;
-            inFile.read(reinterpret_cast<char*>(&entityIdData), sizeof(uint64_t));
-
-            uint64_t referenceIdData = 0;
-            inFile.read(reinterpret_cast<char*>(&referenceIdData), sizeof(uint64_t));
-
-            EntityID entityId;
-            ReferenceID referenceId = (ReferenceID)referenceIdData;
-            addEntity(entityId, referenceId);
-            entityIdResolution[entityIdData] = entityId;
-
-            uint64_t componentCount = 0;
-            inFile.read(reinterpret_cast<char*>(&componentCount), sizeof(uint64_t));
-
-            for(std::size_t i = 0; i < (std::size_t)componentCount; i++){
-                uint64_t typeId = 0;
-                inFile.read(reinterpret_cast<char*>(&typeId), sizeof(uint64_t));
-
-                uint8_t isParent = 0;
-                inFile.read(reinterpret_cast<char*>(&isParent), sizeof(uint8_t));
-
-                if(isParent == 0){
-                    uint64_t parent = 0;
-                    inFile.read(reinterpret_cast<char*>(&parent), sizeof(uint64_t));
-                    parentReferences[typeId] = std::make_pair(entityIdData, parent);
-                }else{
-                    uint64_t dataLength = 0;
-                    inFile.read(reinterpret_cast<char*>(&dataLength), sizeof(uint64_t));
-
-                    std::vector<uint8_t> componentData(dataLength);
-                    inFile.read(reinterpret_cast<char*>(componentData.data()), componentData.size());
-
-                    ComponentType *componentType = getComponentType(typeId);
-                    componentType->parseFunc(*this, entityId, componentData);
-                }
-            }
-        }
-        for (const auto& parentReference : parentReferences) {
-            EntityID entityId = entityIdResolution.at(parentReference.second.first);
-            EntityID parentEntityId = entityIdResolution.at(parentReference.second.second);
-            addComponent(entityId, parentEntityId, parentReference.first);
-        }
-    }
-
-    void ECS::forEachEntity(std::function<void(ECS &ecs, EntityID &entity)> routine){
+    void ECS::forEachEntity(std::function<void(EntityID &entity)> routine){
         std::size_t currentNextTombstoneIndex = 0;
         std::size_t currentNextTombstone = 0;
         if(!entityManager.tombstoneEntities.empty()){
@@ -130,24 +37,35 @@ namespace BasicECS{
 
         for(std::size_t i = 0; i < entityManager.entities.size(); i++){
             if(i == currentNextTombstone && currentNextTombstoneIndex < entityManager.tombstoneEntities.size()){
-                currentNextTombstone = entityManager.tombstoneEntities.at(currentNextTombstoneIndex);
                 currentNextTombstoneIndex ++;
+                if(currentNextTombstoneIndex < entityManager.tombstoneEntities.size()){
+                    currentNextTombstone = entityManager.tombstoneEntities.at(currentNextTombstoneIndex);
+                }
             }else{
-                routine(*this, i);
+                routine(i);
             }
         }
+    }
+    void ECS::forEachComponent(EntityID entityID ,std::function<void(TypeID componentTypeID)> routine){
+        getEntity(entityID)->components.forEach([&routine](TypeID componentTypeID, Component value){
+            routine(componentTypeID);
+        });
     }
 
     ECS& ECS::addEntity(EntityID &entityID){
 
-        ReferenceID referenceID = 0;
-        addEntity(entityID, referenceID);
+        ResourceID resourceID = 0;
+        addEntity(entityID, resourceID);
 
         return *this;
     }
+    ECS& ECS::addEntity(){
+        EntityID entityID;
+        return addEntity(entityID);
+    }
 
-    void ECS::addEntity(EntityID &entityID, ReferenceID referenceID){
-        Entity entity{.referenceId = referenceID};
+    void ECS::addEntity(EntityID &entityID, ResourceID resourceID){
+        Entity entity{.resourceID = resourceID};
 
         if(!entityManager.tombstoneEntities.empty()){
             entityID = entityManager.tombstoneEntities.back();
@@ -158,13 +76,15 @@ namespace BasicECS{
             entityID = entityManager.entities.size() - 1;
         }
 
-        if(referenceID != 0){
-            if(entityManager.referenceToID.find(referenceID) != entityManager.referenceToID.end()){
-                std::cerr << "ERROR: referenceId  '" << referenceID << "' already exists\n";
+        if(resourceID != 0){
+            if(entityManager.resourceToID.find(resourceID) != entityManager.resourceToID.end()){
+                std::cerr << "ERROR: resourceID  '" << resourceID << "' already exists\n";
                 throw std::exception();
             }
-            entityManager.referenceToID[referenceID] = entityID;
+            entityManager.resourceToID[resourceID] = entityID;
         }
+
+        entityManager.cachedEntity = entityID;
 
     }
 
@@ -184,9 +104,40 @@ namespace BasicECS{
         auto pos = std::lower_bound(entityManager.tombstoneEntities.begin(), entityManager.tombstoneEntities.end(), entityID);
         entityManager.tombstoneEntities.insert(pos, entityID);
 
+        for(std::size_t i = 0; i < entity->childEntities.size(); i++){
+            removeEntity(entity->childEntities.at(i));
+        }
+
+        if(entity->parentEntity != RootEntityID){
+            Entity *parentEntity = getEntity(entity->parentEntity);
+
+            std::vector<EntityID> vec = parentEntity->childEntities;
+            vec.erase(std::remove(vec.begin(), vec.end(), entityID), vec.end());
+        }
+
+        entity->isTombstone = true;
+
         pruneEntities();
         
         return *this;
+    }
+
+    ECS& ECS::appendChild(EntityID entityID, EntityID childEntityID){
+        Entity *entity = getEntity(entityID);
+        Entity *childEntity = getEntity(childEntityID);
+
+        entity->childEntities.push_back(childEntityID);
+        childEntity->parentEntity = entityID;
+
+        return *this;
+    }
+    EntityID ECS::getParentEntityID(EntityID entityID){
+        Entity *entity = getEntity(entityID);
+        return entity->parentEntity;
+    }
+    std::vector<EntityID> ECS::getChildEntityIDs(EntityID entityID){
+        Entity *entity = getEntity(entityID);
+        return entity->childEntities;
     }
 
     void ECS::removeComponent(EntityID entityID, TypeID typeId){
@@ -203,8 +154,8 @@ namespace BasicECS{
             auto pos = std::lower_bound(componentType->tombstoneComponents.begin(), componentType->tombstoneComponents.end(), index);
             componentType->tombstoneComponents.insert(pos, index);
 
-            if(componentType->cleanUpFunc != nullptr){
-                componentType->cleanUpFunc(*this, entityID);
+            if(componentType->deinitializeFunc != nullptr){
+                componentType->deinitializeFunc(*this, entityID);
             }
         }
 
@@ -216,7 +167,7 @@ namespace BasicECS{
             }
         }
 
-        componentType->pruneComponentTypeFunc(*this);
+        componentType->pruneComponentListFunc(*this);
     }
 
     void ECS::addComponent(EntityID entityID, EntityID parentEntityID, TypeID typeId){
@@ -228,6 +179,8 @@ namespace BasicECS{
 
         Component component = (Component)*getComponent(parentEntity, typeId);
 
+        entityManager.cachedEntity = entityID;
+
         Component *component_it = entity->components.get(typeId);
         if(component_it != nullptr){
             removeComponent(entityID, typeId);
@@ -236,6 +189,13 @@ namespace BasicECS{
         entity->components.insert(typeId, component);
 
         componentType->entitiesUsingThis.push_back(entityID);
+
+        ResourceID newResourceID = (std::size_t)rand();
+        while(entityManager.resourceToID.find(newResourceID) != entityManager.resourceToID.end() || newResourceID == 0){
+            newResourceID ++;
+        }
+        getEntity(parentEntityID)->resourceID = newResourceID;
+        entityManager.resourceToID[newResourceID] = parentEntityID;
     }
 
     ECS::ComponentType* ECS::getComponentType(TypeID typeId){
@@ -258,21 +218,39 @@ namespace BasicECS{
     }
 
     ECS::Entity* ECS::getEntity(EntityID entityID){
-        if(entityID >= entityManager.entities.size()){
-            std::cerr << "ERROR: No entity with id '" << entityID << "'\n";
-            throw std::exception();
+        if(entityID < entityManager.entities.size()){
+            if(entityManager.entities.at(entityID).isTombstone == false){
+                return &entityManager.entities.at(entityID);
+            }
         }
-        return &entityManager.entities.at(entityID);
+
+        std::cerr << "ERROR: No entity with id '" << entityID << "'\n";
+        throw std::exception();
     }
 
-    void ECS::runAllComponentCleanUps(ComponentType *componentType, TypeID typeId){
+    std::vector<uint8_t> ECS::serializeComponent(TypeID componentTypeID, EntityID entityID){
+        ComponentType *componentType = getComponentType(componentTypeID);
+        if(componentType->serializeFunc == nullptr){
+            return {};
+        }
+        return componentType->serializeFunc(*this, entityID);
+    }
+    void ECS::deserializeComponent(TypeID componentTypeID, EntityID entityID, const std::vector<uint8_t> componentData){
+        ComponentType *componentType = getComponentType(componentTypeID);
+        if(componentType->deserializeFunc == nullptr){
+            return;
+        }
+        componentType->deserializeFunc(*this, entityID, componentData);
+    }
+
+    void ECS::runAllComponentDeinitializes(ComponentType *componentType, TypeID typeId){
         for(std::size_t i = 0; i < componentType->entitiesUsingThis.size(); i++){
             EntityID entityID = componentType->entitiesUsingThis.at(i);
             Entity *entity = &entityManager.entities.at(entityID);
 
             if(entity->components.get(typeId)->parent == entityID){
-                if(componentType->cleanUpFunc != nullptr){
-                    componentType->cleanUpFunc(*this, entityID);
+                if(componentType->deinitializeFunc != nullptr){
+                    componentType->deinitializeFunc(*this, entityID);
                 }
             }
         }
@@ -315,15 +293,23 @@ namespace BasicECS{
 
         std::cout << "Entities" << "\n" << "========" << "\n";
 
-        forEachEntity([](ECS &ecs, EntityID &entityId){ 
-            Entity entity = ecs.entityManager.entities.at(entityId);
+        std::cout << "tombstone entities: ";
+        for(int i = 0; i < entityManager.tombstoneEntities.size(); i++){
+            std::cout << entityManager.tombstoneEntities.at(i) << ", ";
+        }
+        std::cout <<  "\n";
+
+        forEachEntity([this](EntityID &entityId){ 
+            Entity entity = this->entityManager.entities.at(entityId);
             std::cout << "id: " << entityId;
-            if(entity.referenceId > 0){std::cout << " refId: " << entity.referenceId;}
+            if(entity.resourceID > 0){std::cout << "  resourceId: " << entity.resourceID;}
+            if(entity.parentEntity < (std::size_t)-1){std::cout << " parentEntity: " << entity.parentEntity;}
             std::cout <<  "\n";
-            entity.components.forEach([&ecs](std::size_t key, Component value){
-                std::cout << "  " << ecs.componentManager.componentTypes.at(key).name 
-                            << ", index: " << value.componentIndex 
-                            << ", parent: " << value.parent << "\n";
+            entity.components.forEach([this, entityId](std::size_t key, Component value){
+                std::cout << "  " << this->componentManager.componentTypes.at(key).name 
+                            << ", index: " << value.componentIndex;
+                if(value.parent != entityId){std::cout << ", parent: " << value.parent;}
+                std::cout <<  "\n";
             });
             std::cout <<  "\n";
         });

@@ -9,49 +9,213 @@ namespace BasicECS{
 
     using TypeID = std::size_t;
     using EntityID = std::size_t;
-    using ReferenceID = std::size_t;
+    using ResourceID = std::size_t;
+
+    constexpr std::size_t RootEntityID = -1;
 
     template<typename T>
     struct Reference{
         TypeID typeId;
-        ReferenceID referenceId;
+        ResourceID resourceID;
     };
 
     class ECS{
     public:
-        using ParseFunc = void (*)(ECS &ecs, EntityID entity, const std::vector<uint8_t> data);
-        using SerializeFunc = std::vector<uint8_t> (*)(ECS &ecs, EntityID entity);
         using InitialiseFunc = void (*)(ECS &ecs, EntityID entity);
-        using CleanUpFunc = void (*)(ECS &ecs, EntityID entity);
+        using DeinitializeFunc = void (*)(ECS &ecs, EntityID entity);
+        using SerializeFunc = std::vector<uint8_t> (*)(ECS &ecs, EntityID entity);
+        using DeserializeFunc = void (*)(ECS &ecs, EntityID entity, const std::vector<uint8_t> data);
 
-        using RemoveComponentTypeFunc = void (*)(ECS &ecs);
-        using PruneComponentTypeFunc = void (*)(ECS &ecs);
+        struct ComponentFunctions{
+            InitialiseFunc initialiseFunc = nullptr;
+            DeinitializeFunc deinitializeFunc = nullptr;
+            SerializeFunc serializeFunc = nullptr;
+            DeserializeFunc deserializeFunc = nullptr;
+        };
     public:
+        /**
+         * @brief Terminates the ecs 
+         */
+        ~ECS();
 
-        void terminate();
+        /**
+         * @brief Clears the ecs of all entities and components 
+         */
+        void clear();
 
-        void saveState(const char* filePath);
-        void loadState(const char* filePath);
-
-        template <typename T> void addComponentType(InitialiseFunc initialiseFunc, CleanUpFunc cleanUpFunc);
+        /**
+         * @brief Adds a new component type to the ecs 
+         * @tparam T Component type to add
+         * @param initialiseFunc The fuction that gets called when this component is added  
+         * @param deinitializeFunc The fuction that gets called when this component is removed  
+         */
+        template <typename T> void addComponentType(ComponentFunctions componentFunctions);
+        /**
+         * @brief Removes a component type from the ecs 
+         * @tparam T Component type to remove
+         */
         template <typename T> void removeComponentType();
 
+        /**
+         * @brief Adds a new entity to the ecs (caches entity)
+         * @param entityID A reference to the new entityId 
+         * @return A reference to the ecs
+         */
         ECS& addEntity(EntityID &entityID);
+        /**
+         * @brief Adds a new entity to the ecs (caches entity)
+         * @return A reference to the ecs
+         */
+        ECS& addEntity();
+        /**
+         * @brief Removes an entity from the ecs 
+         * @param entityID The id of the entity to remove
+         * @return A reference to the ecs
+         */
         ECS& removeEntity(EntityID entityID);
 
-        template <typename T> Reference<T> createReference(EntityID entityId);
+        /**
+         * @brief Append a child entity to an entity
+         * @param entityID The entity to append the child entity to 
+         * @param childEntityID The child entity to append to the entity
+         * @return A reference to the ecs
+         */
+        ECS& appendChild(EntityID entityID, EntityID childEntityID);
+        /**
+         * @brief Gets the parent entity ID from an entity
+         * @param entityID The entity to get the parent entity ID from
+         * @return The entity ID of the parent
+         */
+        EntityID getParentEntityID(EntityID entityID);
+        /**
+         * @brief Gets the child entity IDs from an entity
+         * @param entityID The entity to get the child entity IDs from
+         * @return A list of the child entity IDs
+         */
+        std::vector<EntityID> getChildEntityIDs(EntityID entityID);
+        
+        /**
+         * @brief Creates a reference of a component 
+         * @tparam T Component type 
+         * @param entityID The entity with the component to reference 
+         * @return A reference of the type T
+         */
+        template <typename T> Reference<T> createReference(EntityID entityID);
 
-        template <typename T> ECS& addComponent(EntityID entityID, T t);
-        template <typename T> ECS& addComponent(EntityID entityID, EntityID parentID);
+        /**
+         * @brief Add a component to an entity (caches entity)
+         * @param entityID The ID of the entity to add the component
+         * @param component The component
+         * @return A reference to the ecs
+         */
+        template <typename T> ECS& addComponent(EntityID entityID, T component);
+        /**
+         * @brief Add a component to the cached entity
+         * @param component The component
+         * @return A reference to the ecs
+         */
+        template <typename T> ECS& addComponent(T component);
+        /**
+         * @brief Add a shared component to an entity that is already a child of another component (caches entity)
+         * @tparam T Component type to share
+         * @param entityID The ID of the entity to add the shared component
+         * @param parentEntityID The ID of the parent entity to shares its component
+         * @return A reference to the ecs
+         */
+        template <typename T> ECS& addComponent(EntityID entityID, EntityID parentEntityID);
+        /**
+         * @brief Add a shared component to the cached entity that is already a child of another component
+         * @tparam T Component type to share
+         * @param parentEntityID The ID of the parent entity to shares its component
+         * @return A reference to the ecs
+         */
+        template <typename T> ECS& addComponent(EntityID parentEntityID);
+        /**
+         * @brief Removes a component from an entity
+         * @tparam T Component type to remove
+         * @param entityID The ID of the entity to remove this component
+         * @return A reference to the ecs
+         */
         template <typename T> ECS& removeComponent(EntityID entityID);
 
+        /**
+         * @brief Gets a component from an entity
+         * @tparam T Component type to get 
+         * @param entityID The ID of the entity to get the component from 
+         * @return A reference to the requested component 
+         */
         template <typename T> T& getComponent(EntityID entityID);
+        /**
+         * @brief Gets a component from an reference
+         * @tparam T Component type to get
+         * @param reference The reference to get the component from 
+         * @return A reference to the requested component 
+         */
         template <typename T> T& getComponent(Reference<T> reference);
+        /**
+         * @brief Serializes a component 
+         * @param componentTypeID The TypeID of the component
+         * @param entityID The entity of the component to serialize
+         * @return A vector of the serialized components' bytes 
+         */
 
-        template <typename T> void forEach(std::function<void(T &t)> routine);
-        template <typename T1, typename T2> void forEach(std::function<void(T1 &t1, T2 &t2)> routine);
+        std::vector<uint8_t> serializeComponent(TypeID componentTypeID, EntityID entityID);
+        /**
+         * @brief Deserializes a component 
+         * @param componentTypeID The TypeID of the component
+         * @param entityID The entity to add the deserialized component
+         * @param componentData The serialized component data to deserialize
+         */
+        void deserializeComponent(TypeID componentTypeID, EntityID entityID, const std::vector<uint8_t> componentData);
 
+        /**
+         * @brief Iterates over all the entities 
+         * @param routine The function for each iteration (function parameters: ECS &ecs, EntityID &entityID)
+         */
+        void forEachEntity(std::function<void(EntityID &entityID)> routine);
+        /**
+         * @brief Iterates over all the components in an entity 
+         * @param entityID the id of the entity to iterate through 
+         * @param routine The function for each iteration (function parameters: ECS &ecs, EntityID &entityID)
+         */
+        void forEachComponent(EntityID entityID ,std::function<void(TypeID componentTypeID)> routine);
+        /**
+         * @brief Iterates over all the entities with the specified component 
+         * @tparam T Component type to iterate over
+         * @param routine The function for each iteration (function parameters: T &component)
+         */
+        template <typename T> void forEach(std::function<void(T &component)> routine);
+        /**
+         * @brief Iterates over all the entities with the specified component
+         * @tparam T Component type to iterate over
+         * @param routine The function for each iteration (function parameters: T &component, EntityID entityID)
+         */
+        template <typename T> void forEach(std::function<void(T &component, EntityID entityID)> routine);
+        /**
+         * @brief Iterates over all the entities with the specified components
+         * @tparam T1 Component type to iterate over
+         * @tparam T2 Component type to iterate over
+         * @param routine The function for each iteration (function parameters: T1 &component1, T2 &component2)
+         */
+        template <typename T1, typename T2> void forEach(std::function<void(T1 &component1, T2 &component2)> routine);
+        /**
+         * @brief Iterates over all the entities with the specified components
+         * @tparam T1 Component type to iterate over
+         * @tparam T2 Component type to iterate over
+         * @param routine The function for each iteration (function parameters: T1 &component1, T2 &component2, EntityID entityID)
+         */
+        template <typename T1, typename T2> void forEach(std::function<void(T1 &component1, T2 &component2, EntityID entityID)> routine);
+
+        /**
+         * @brief Display the component types, entities and components
+         */
         void displayECS();
+        /**
+         * @brief Gets the ID of a component type 
+         * @tparam T The component type to get the ID of 
+         * @param routine The function for each iteration (function parameters: T1 &component1, T2 &component2, EntityID entityID)
+         */
+        template <typename T>  static TypeID getTypeId();
 
     private:
 
@@ -61,20 +225,30 @@ namespace BasicECS{
         };
         struct Entity{
             ComponentMap<Component> components;
-            ReferenceID referenceId;
+            ResourceID resourceID = 0;
+            bool isTombstone = false;
+
+            std::vector<EntityID> childEntities;
+            EntityID parentEntity = RootEntityID;
         };
+
+        using RemoveComponentTypeFunc = void (*)(ECS &ecs);
+        using PruneComponentListFunc = void (*)(ECS &ecs);
+        using ClearComponentListFunc = void (*)(ECS &ecs);
+
         struct ComponentType {
             void* arrayLocation;
             std::vector<EntityID> entitiesUsingThis;
             std::vector<std::size_t> tombstoneComponents;
 
             InitialiseFunc initialiseFunc;
-            CleanUpFunc cleanUpFunc;
-            ParseFunc parseFunc;
+            DeinitializeFunc deinitializeFunc;
             SerializeFunc serializeFunc;
+            DeserializeFunc deserializeFunc;
             
             RemoveComponentTypeFunc removeComponentTypeFunc;
-            PruneComponentTypeFunc pruneComponentTypeFunc;
+            PruneComponentListFunc pruneComponentListFunc;
+            ClearComponentListFunc clearComponentListFunc;
 
             std::string name;
         };
@@ -85,32 +259,35 @@ namespace BasicECS{
         struct EntityManager{
             std::vector<Entity> entities;
             std::vector<EntityID> tombstoneEntities;
-            std::unordered_map<ReferenceID, EntityID> referenceToID;
+            std::unordered_map<ResourceID, EntityID> resourceToID;
+
+            EntityID cachedEntity;
         };
 
     private:
+        void terminate();
+        
         ComponentType* getComponentType(TypeID typeId);
         Component* getComponent(Entity *entity, TypeID typeId);
         Entity* getEntity(EntityID entityID);
 
-        void addEntity(EntityID &entityID, ReferenceID referenceID);
+        void addEntity(EntityID &entityID, ResourceID resourceID);
 
         void removeComponent(EntityID entityID, TypeID typeId);
 
         void addComponent(EntityID entityID, EntityID parentEntityID, TypeID typeId);
 
-        void runAllComponentCleanUps(ComponentType *componentType, TypeID typeId);
+        void runAllComponentDeinitializes(ComponentType *componentType, TypeID typeId);
 
         void pruneEntities();
 
         template <typename T> void pruneComponentList();
-        template <typename T> static void pruneComponentList_(ECS &ecs);
+        template <typename T> friend void pruneComponentList_(ECS &ecs);
 
-        template <typename T> static void removeComponentType_(ECS &ecs);
+        template <typename T> friend void removeComponentType_(ECS &ecs);
 
-        template <typename T> TypeID getTypeId();
-
-        void forEachEntity(std::function<void(ECS &ecs, EntityID &entity)> routine);
+        template <typename T> void clearComponentList();
+        template <typename T> friend void clearComponentList_(ECS &ecs);
 
     private:
         EntityManager entityManager;
