@@ -24,7 +24,7 @@ namespace BasicECS{
         }
 
         entityManager.entities.clear();
-        entityManager.resourceToID.clear();
+        entityManager.entityGUIDToEntityID.clear();
         entityManager.tombstoneEntities.clear();
     }
 
@@ -52,10 +52,14 @@ namespace BasicECS{
         });
     }
 
+    static std::random_device s_RandomDevice;
+    static std::mt19937_64 s_Engine(s_RandomDevice());
+    static std::uniform_int_distribution<uint64_t> s_UniformDistribution;
+
     ECS& ECS::addEntity(EntityID &entityID){
 
-        ResourceID resourceID = 0;
-        addEntity(entityID, resourceID);
+        EntityGUID entityGUID = s_UniformDistribution(s_Engine);
+        addEntity(entityID, entityGUID);
 
         return *this;
     }
@@ -64,8 +68,8 @@ namespace BasicECS{
         return addEntity(entityID);
     }
 
-    void ECS::addEntity(EntityID &entityID, ResourceID resourceID){
-        Entity entity{.resourceID = resourceID};
+    ECS& ECS::addEntity(EntityID &entityID, EntityGUID entityGUID){
+        Entity entity{.entityGUID = entityGUID};
 
         if(!entityManager.tombstoneEntities.empty()){
             entityID = entityManager.tombstoneEntities.back();
@@ -76,16 +80,15 @@ namespace BasicECS{
             entityID = entityManager.entities.size() - 1;
         }
 
-        if(resourceID != 0){
-            if(entityManager.resourceToID.find(resourceID) != entityManager.resourceToID.end()){
-                std::cerr << "ERROR: resourceID  '" << resourceID << "' already exists\n";
-                throw std::exception();
-            }
-            entityManager.resourceToID[resourceID] = entityID;
+        if(entityManager.entityGUIDToEntityID.find(entityGUID) != entityManager.entityGUIDToEntityID.end()){
+            std::cerr << "ERROR: entityGUID  '" << entityGUID << "' already exists\n";
+            throw std::exception();
         }
+        entityManager.entityGUIDToEntityID[entityGUID] = entityID;
 
         entityManager.cachedEntity = entityID;
 
+        return *this;
     }
 
     ECS& ECS::removeEntity(EntityID entityID){
@@ -140,6 +143,20 @@ namespace BasicECS{
         return entity->childEntities;
     }
 
+    EntityGUID ECS::getEntityGUID(EntityID entityID){
+        Entity *entity = getEntity(entityID);
+        return entity->entityGUID;
+    }
+
+    EntityID ECS::getEntityID(EntityGUID entityGUID){
+        auto it = entityManager.entityGUIDToEntityID.find(entityGUID);
+        if(it == entityManager.entityGUIDToEntityID.end()){
+            std::cerr << "ERROR: entity with GUID: '" << entityGUID << "' is unknown\n";
+            throw std::exception();
+        }
+        return it->second;
+    }
+
     void ECS::removeComponent(EntityID entityID, TypeID typeId){
 
         ComponentType *componentType = getComponentType(typeId);
@@ -189,13 +206,6 @@ namespace BasicECS{
         entity->components.insert(typeId, component);
 
         componentType->entitiesUsingThis.push_back(entityID);
-
-        ResourceID newResourceID = (std::size_t)rand();
-        while(entityManager.resourceToID.find(newResourceID) != entityManager.resourceToID.end() || newResourceID == 0){
-            newResourceID ++;
-        }
-        getEntity(parentEntityID)->resourceID = newResourceID;
-        entityManager.resourceToID[newResourceID] = parentEntityID;
     }
 
     ECS::ComponentType* ECS::getComponentType(TypeID typeId){
@@ -274,6 +284,15 @@ namespace BasicECS{
         }
     }
 
+    TypeID ECS::getTypeID(std::string typeName){
+        auto it = componentManager.typeNamesToTypeIds.find(typeName);
+        if(it == componentManager.typeNamesToTypeIds.end()){
+            std::cerr << "ERROR: No component with name '" << typeName << "'\n";
+            throw std::exception();
+        }
+        return it->second;
+    }
+
     void ECS::displayECS(){
         std::cout << "Component Types" << "\n" << "===============" << "\n";
 
@@ -301,8 +320,8 @@ namespace BasicECS{
 
         forEachEntity([this](EntityID &entityId){ 
             Entity entity = this->entityManager.entities.at(entityId);
-            std::cout << "id: " << entityId;
-            if(entity.resourceID > 0){std::cout << "  resourceId: " << entity.resourceID;}
+            std::cout << "ID: " << entityId;
+            if(entity.entityGUID > 0){std::cout << "  GUID: " << entity.entityGUID;}
             if(entity.parentEntity < (std::size_t)-1){std::cout << " parentEntity: " << entity.parentEntity;}
             std::cout <<  "\n";
             entity.components.forEach([this, entityId](std::size_t key, Component value){

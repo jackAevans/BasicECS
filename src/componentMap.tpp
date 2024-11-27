@@ -42,7 +42,6 @@ void ComponentMap<ValueType>::resize(std::size_t newCapacity){
             insert(std::get<0>(row), std::get<1>(row));
         }
     }
-    std::cout << "resize" << std::endl;
 }
 
 template<typename ValueType>

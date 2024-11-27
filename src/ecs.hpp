@@ -7,31 +7,33 @@
 
 namespace BasicECS{
 
+    class ECS;
+
     using TypeID = std::size_t;
     using EntityID = std::size_t;
-    using ResourceID = std::size_t;
+    using EntityGUID = uint64_t;
 
     constexpr std::size_t RootEntityID = -1;
 
     template<typename T>
     struct Reference{
         TypeID typeId;
-        ResourceID resourceID;
+        EntityGUID entityGUID;
+    };
+
+    using InitialiseFunc = void (*)(ECS &ecs, EntityID entity);
+    using DeinitializeFunc = void (*)(ECS &ecs, EntityID entity);
+    using SerializeFunc = std::vector<uint8_t> (*)(ECS &ecs, EntityID entity);
+    using DeserializeFunc = void (*)(ECS &ecs, EntityID entity, const std::vector<uint8_t> data);
+
+    struct ComponentFunctions{
+        InitialiseFunc initialiseFunc = nullptr;
+        DeinitializeFunc deinitializeFunc = nullptr;
+        SerializeFunc serializeFunc = nullptr;
+        DeserializeFunc deserializeFunc = nullptr;
     };
 
     class ECS{
-    public:
-        using InitialiseFunc = void (*)(ECS &ecs, EntityID entity);
-        using DeinitializeFunc = void (*)(ECS &ecs, EntityID entity);
-        using SerializeFunc = std::vector<uint8_t> (*)(ECS &ecs, EntityID entity);
-        using DeserializeFunc = void (*)(ECS &ecs, EntityID entity, const std::vector<uint8_t> data);
-
-        struct ComponentFunctions{
-            InitialiseFunc initialiseFunc = nullptr;
-            DeinitializeFunc deinitializeFunc = nullptr;
-            SerializeFunc serializeFunc = nullptr;
-            DeserializeFunc deserializeFunc = nullptr;
-        };
     public:
         /**
          * @brief Terminates the ecs 
@@ -62,6 +64,13 @@ namespace BasicECS{
          * @return A reference to the ecs
          */
         ECS& addEntity(EntityID &entityID);
+        /**
+         * @brief Adds a new entity to the ecs (caches entity)
+         * @param entityID A reference to the new entityId 
+         * @param entityGUID A globally unique ID 
+         * @return A reference to the ecs
+         */
+        ECS& addEntity(EntityID &entityID, EntityGUID entityGUID);
         /**
          * @brief Adds a new entity to the ecs (caches entity)
          * @return A reference to the ecs
@@ -101,6 +110,19 @@ namespace BasicECS{
          * @return A reference of the type T
          */
         template <typename T> Reference<T> createReference(EntityID entityID);
+
+        /**
+         * @brief Get the globally unique ID of an entity
+         * @param entityID The ID of the entity to get the GUID from 
+         * @return The GUID of the entity
+         */
+        EntityGUID getEntityGUID(EntityID entityID);
+        /**
+         * @brief Get the ID of an entity
+         * @param entityGUID The globally unique ID to get the entity ID from
+         * @return The ID of the entity
+         */
+        EntityID getEntityID(EntityGUID entityGUID);
 
         /**
          * @brief Add a component to an entity (caches entity)
@@ -210,12 +232,19 @@ namespace BasicECS{
          * @brief Display the component types, entities and components
          */
         void displayECS();
+
+        /**
+         * @brief Gets the type ID of a component from the name 
+         * @param typeName The name of the component to get the ID from
+         * @return the ID of the component 
+         */
+        TypeID getTypeID(std::string typeName);
         /**
          * @brief Gets the ID of a component type 
          * @tparam T The component type to get the ID of 
          * @param routine The function for each iteration (function parameters: T1 &component1, T2 &component2, EntityID entityID)
          */
-        template <typename T>  static TypeID getTypeId();
+        template <typename T>  static TypeID getTypeID();
 
     private:
 
@@ -225,7 +254,7 @@ namespace BasicECS{
         };
         struct Entity{
             ComponentMap<Component> components;
-            ResourceID resourceID = 0;
+            EntityGUID entityGUID = 0;
             bool isTombstone = false;
 
             std::vector<EntityID> childEntities;
@@ -259,7 +288,7 @@ namespace BasicECS{
         struct EntityManager{
             std::vector<Entity> entities;
             std::vector<EntityID> tombstoneEntities;
-            std::unordered_map<ResourceID, EntityID> resourceToID;
+            std::unordered_map<EntityGUID, EntityID> entityGUIDToEntityID;
 
             EntityID cachedEntity;
         };
@@ -270,8 +299,6 @@ namespace BasicECS{
         ComponentType* getComponentType(TypeID typeId);
         Component* getComponent(Entity *entity, TypeID typeId);
         Entity* getEntity(EntityID entityID);
-
-        void addEntity(EntityID &entityID, ResourceID resourceID);
 
         void removeComponent(EntityID entityID, TypeID typeId);
 

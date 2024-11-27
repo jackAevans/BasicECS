@@ -22,7 +22,7 @@ namespace BasicECS{
         return typeName;
     }
 
-    template <typename T>  TypeID ECS::getTypeId(){
+    template <typename T>  TypeID ECS::getTypeID(){
         return typeid(T).hash_code();
     }
 
@@ -64,22 +64,11 @@ namespace BasicECS{
     }
 
     template <typename T> Reference<T> ECS::createReference(EntityID entityId){
-        ResourceID resourceID = getEntity(entityId)->resourceID;
-        if(resourceID != 0){
-            return {getTypeId<T>(), resourceID};
-        }
-
-        ResourceID newResourceID = (std::size_t)rand();
-        while(entityManager.resourceToID.find(newResourceID) != entityManager.resourceToID.end() || newResourceID == 0){
-            newResourceID ++;
-        }
-        getEntity(entityId)->resourceID = newResourceID;
-        entityManager.resourceToID[newResourceID] = entityId;
-        return {getTypeId<T>(), newResourceID};
+        return {getTypeID<T>(), getEntity(entityId)->entityGUID};
     }
 
     template <typename T> void ECS::addComponentType(ComponentFunctions componentFunctions){
-        TypeID typeID = getTypeId<T>();
+        TypeID typeID = getTypeID<T>();
         std::string name = getTypeName<T>();
 
         ComponentType componentType = {
@@ -123,7 +112,7 @@ namespace BasicECS{
     }
 
     template <typename T> void ECS::removeComponentType(){
-        TypeID typeId = getTypeId<T>();
+        TypeID typeId = getTypeID<T>();
         auto it = componentManager.componentTypes.find(typeId);
         if(it != componentManager.componentTypes.end()){
             runAllComponentDeinitializes(&it->second, typeId);
@@ -132,7 +121,7 @@ namespace BasicECS{
     }
 
     template <typename T> ECS& ECS::addComponent(EntityID entityID, T t){
-        TypeID typeId = getTypeId<T>();
+        TypeID typeId = getTypeID<T>();
 
         auto componentType_it = componentManager.componentTypes.find(typeId);
         if(componentType_it == componentManager.componentTypes.end()){
@@ -177,7 +166,7 @@ namespace BasicECS{
         return addComponent(entityManager.cachedEntity, component);
     }
     template <typename T> ECS& ECS::addComponent(EntityID entityID, EntityID parentID){
-        TypeID typeId = getTypeId<T>();
+        TypeID typeId = getTypeID<T>();
 
         addComponent(entityID, parentID, typeId);
 
@@ -187,19 +176,19 @@ namespace BasicECS{
         return addComponent<T>(entityManager.cachedEntity, parentEntityID);
     }
     template <typename T> ECS& ECS::removeComponent(EntityID entityID){
-        removeComponent(entityID, getTypeId<T>());
+        removeComponent(entityID, getTypeID<T>());
         return *this;
     }
 
     template <typename T> T& ECS::getComponent(EntityID entityID){
-        TypeID typeId = getTypeId<T>();
+        TypeID typeId = getTypeID<T>();
 
         ComponentType *componentType = getComponentType(typeId);
 
         Component *component = getComponent(getEntity(entityID), typeId);
 
         if(entityID >= entityManager.entities.size()){
-            std::cout << "ERROR: component parent does not exist for component '" <<  componentType->name << "'\n";
+            std::cerr << "ERROR: component parent does not exist for component '" <<  componentType->name << "'\n";
         }
 
         void* componentArrLocation = componentType->arrayLocation;
@@ -209,11 +198,11 @@ namespace BasicECS{
     }
 
     template <typename T> T& ECS::getComponent(Reference<T> reference){
-        return getComponent<T>(entityManager.resourceToID.at(reference.resourceID));
+        return getComponent<T>(entityManager.entityGUIDToEntityID.at(reference.entityGUID));
     }
 
     template <typename T> void ECS::forEach(std::function<void(T &t)> routine){
-        TypeID typeId = getTypeId<T>();
+        TypeID typeId = getTypeID<T>();
 
         ComponentType *componentType = getComponentType(typeId);
 
@@ -239,7 +228,7 @@ namespace BasicECS{
         }
     }
     template <typename T> void ECS::forEach(std::function<void(T &t, EntityID entityID)> routine){
-        TypeID typeId = getTypeId<T>();
+        TypeID typeId = getTypeID<T>();
         ComponentType *componentType = getComponentType(typeId);
         std::vector<T>* componentArr = static_cast<std::vector<T>*>(componentType->arrayLocation);
 
@@ -253,11 +242,11 @@ namespace BasicECS{
     }
 
     template <typename T1, typename T2> void ECS::forEach(std::function<void(T1 &t1, T2 &t2)> routine){
-        TypeID typeId1 = getTypeId<T1>();
+        TypeID typeId1 = getTypeID<T1>();
         ComponentType *componentType1 = getComponentType(typeId1);
         std::vector<T1>* component1Arr = static_cast<std::vector<T1>*>(componentType1->arrayLocation);
 
-        TypeID typeId2 = getTypeId<T2>();
+        TypeID typeId2 = getTypeID<T2>();
         ComponentType *componentType2 = getComponentType(typeId2);
         std::vector<T2>* component2Arr = static_cast<std::vector<T2>*>(componentType2->arrayLocation);
 
@@ -277,11 +266,11 @@ namespace BasicECS{
     }
 
     template <typename T1, typename T2> void ECS::forEach(std::function<void(T1 &t1, T2 &t2, EntityID entityID)> routine){
-        TypeID typeId1 = getTypeId<T1>();
+        TypeID typeId1 = getTypeID<T1>();
         ComponentType *componentType1 = getComponentType(typeId1);
         std::vector<T1>* component1Arr = static_cast<std::vector<T1>*>(componentType1->arrayLocation);
 
-        TypeID typeId2 = getTypeId<T2>();
+        TypeID typeId2 = getTypeID<T2>();
         ComponentType *componentType2 = getComponentType(typeId2);
         std::vector<T2>* component2Arr = static_cast<std::vector<T2>*>(componentType2->arrayLocation);
 
@@ -301,7 +290,7 @@ namespace BasicECS{
     }
 
     template <typename T> void ECS::pruneComponentList(){
-        TypeID typeId = getTypeId<T>();
+        TypeID typeId = getTypeID<T>();
         ComponentType *componentType = getComponentType(typeId);
         std::vector<T>* componentArr = static_cast<std::vector<T>*>(componentType->arrayLocation);
 
@@ -324,7 +313,7 @@ namespace BasicECS{
     }
 
     template <typename T> void ECS::clearComponentList(){
-        TypeID typeId = getTypeId<T>();
+        TypeID typeId = getTypeID<T>();
         ComponentType *componentType = getComponentType(typeId);
         componentType->entitiesUsingThis.clear();
         componentType->tombstoneComponents.clear();
