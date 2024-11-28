@@ -29,8 +29,6 @@ void logTestResult(bool result, const char* testName) {
 
 void basicEcsSpeedTest(int amount);
 
-void enttSpeedTest(int amount);
-
 bool createEntitiesTest();
 
 bool addingComponentTest();

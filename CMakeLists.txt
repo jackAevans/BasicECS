@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(Viking)
+project(BasicECS)
 
 # Set the name of the executable
 set(EXE_NAME testBasicECS)

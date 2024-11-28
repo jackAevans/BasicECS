@@ -1,14 +1,8 @@
 #include <iostream>
 #include <ecs.hpp>
-// #include <entt.hpp>
 #include <sstream>
 
 #include "test.hpp"
-
-using namespace BasicECS;
-
-struct Position { float x, y, z; };
-struct Velocity { float dx, dy, dz; };
 
 int main() {
     LOG_TEST_RESULT(createEntitiesTest);
@@ -26,34 +20,11 @@ int main() {
 
     basicEcsSpeedTest(1000000);
 
-        BasicECS::ECS ecs;
-
-    ecs.addEntity()
-        .addComponent(Velocity{2, 2, 3});
-
-    BasicECS::EntityID entityID;
-    ecs.addEntity(entityID)
-        .addComponent(Velocity{8, 1, 6})
-        .addComponent(Position{0, 1, 3.5});
-
-    std::cout << "Getting a single component:\n";
-
-    Position &pos = ecs.getComponent<Position>(entityID);
-    std::cout << "Position component: " << pos.x << ", " << pos.y << ", " << pos.z << "\n";
-
-    ecs.forEach<Velocity>([](Velocity &vel){
-        vel.dx ++;
-    });
-
-    std::cout << "Iterating over entities with both Velocity and Position components:\n";
-
-    ecs.forEach<Position, Velocity>([](Position pos, Velocity &vel){
-        std::cout << "Position component: " << pos.x << ", " << pos.y << ", " << pos.z << "\n";
-        std::cout << "Velocity component: " << vel.dx << ", " << vel.dy << ", " << vel.dz << "\n";
-    });
-
     return 0;
 }
+
+struct Position { float x, y, z; };
+struct Velocity { float dx, dy, dz; };
 
 void initialiseVelocity(BasicECS::ECS &ecs, BasicECS::EntityID entity) { ecs.getComponent<Position>(entity).x = 10;}
 void deinitializeVelocity(BasicECS::ECS &ecs, BasicECS::EntityID entity) { ecs.getComponent<Position>(entity).x = -5;}
@@ -475,26 +446,6 @@ double timeSinceEpochMillisec() {
     uint64_t nano = duration_cast<nanoseconds>(system_clock::now().time_since_epoch()).count();
     return (double)nano/(double)1000000;
 }
-
-// void enttSpeedTest(int amount){
-//     entt::registry registry;
-
-//     for(int i = 0; i < amount; i++){
-//         entt::entity entity = registry.create();
-//         registry.emplace<Position>(entity, Position{0, 1, 20});
-//         registry.emplace<Velocity>(entity, Velocity{0,0,0});
-//     }
-
-//     double startTime = timeSinceEpochMillisec();
-
-//     auto view = registry.view<Velocity>();
-//     for(auto entity : view){
-//         Velocity& velocity = view.get<Velocity>(entity);
-//         velocity.dx += 9;
-//     }
-
-//     std::cout << "Entt time: " << timeSinceEpochMillisec() - startTime << "ms\n";
-// }
 
 void basicEcsSpeedTest(int amount){
     BasicECS::ECS ecs;
