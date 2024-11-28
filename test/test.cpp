@@ -1,6 +1,6 @@
 #include <iostream>
 #include <ecs.hpp>
-#include <entt.hpp>
+// #include <entt.hpp>
 #include <sstream>
 
 #include "test.hpp"
@@ -450,25 +450,25 @@ double timeSinceEpochMillisec() {
     return (double)nano/(double)1000000;
 }
 
-void enttSpeedTest(int amount){
-    entt::registry registry;
+// void enttSpeedTest(int amount){
+//     entt::registry registry;
 
-    for(int i = 0; i < amount; i++){
-        entt::entity entity = registry.create();
-        registry.emplace<Position>(entity, Position{0, 1, 20});
-        registry.emplace<Velocity>(entity, Velocity{0,0,0});
-    }
+//     for(int i = 0; i < amount; i++){
+//         entt::entity entity = registry.create();
+//         registry.emplace<Position>(entity, Position{0, 1, 20});
+//         registry.emplace<Velocity>(entity, Velocity{0,0,0});
+//     }
 
-    double startTime = timeSinceEpochMillisec();
+//     double startTime = timeSinceEpochMillisec();
 
-    auto view = registry.view<Velocity>();
-    for(auto entity : view){
-        Velocity& velocity = view.get<Velocity>(entity);
-        velocity.dx += 9;
-    }
+//     auto view = registry.view<Velocity>();
+//     for(auto entity : view){
+//         Velocity& velocity = view.get<Velocity>(entity);
+//         velocity.dx += 9;
+//     }
 
-    std::cout << "Entt time: " << timeSinceEpochMillisec() - startTime << "ms\n";
-}
+//     std::cout << "Entt time: " << timeSinceEpochMillisec() - startTime << "ms\n";
+// }
 
 void basicEcsSpeedTest(int amount){
     BasicECS::ECS ecs;
