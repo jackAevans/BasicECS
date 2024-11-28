@@ -1,8 +1,9 @@
 #pragma once
 
+#include <componentMap.hpp>
+
 #include <unordered_map>
 #include <vector>
-#include "componentMap.hpp"
 #include <functional>
 
 namespace BasicECS{
@@ -15,12 +16,6 @@ namespace BasicECS{
 
     constexpr std::size_t RootEntityID = -1;
 
-    template<typename T>
-    struct Reference{
-        TypeID typeId;
-        EntityGUID entityGUID;
-    };
-
     using InitialiseFunc = void (*)(ECS &ecs, EntityID entity);
     using DeinitializeFunc = void (*)(ECS &ecs, EntityID entity);
     using SerializeFunc = std::vector<uint8_t> (*)(ECS &ecs, EntityID entity);
@@ -31,6 +26,12 @@ namespace BasicECS{
         DeinitializeFunc deinitializeFunc = nullptr;
         SerializeFunc serializeFunc = nullptr;
         DeserializeFunc deserializeFunc = nullptr;
+    };
+
+    template<typename T>
+    struct Reference{
+        TypeID typeId;
+        EntityGUID entityGUID;
     };
 
     class ECS{
@@ -247,7 +248,6 @@ namespace BasicECS{
         template <typename T>  static TypeID getTypeID();
 
     private:
-
         struct Component {
             std::size_t componentIndex;
             EntityID parent;
