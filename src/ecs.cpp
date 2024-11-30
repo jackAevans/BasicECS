@@ -208,6 +208,13 @@ namespace BasicECS{
         componentType->entitiesUsingThis.push_back(entityID);
     }
 
+    bool ECS::componentTypeExists(TypeID typeId){
+        if(componentManager.componentTypes.find(typeId) == componentManager.componentTypes.end()){
+            return false;
+        }
+        return true;
+    }
+
     ECS::ComponentType* ECS::getComponentType(TypeID typeId){
         auto componentType_it = componentManager.componentTypes.find(typeId);
         if(componentType_it == componentManager.componentTypes.end()){

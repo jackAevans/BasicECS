@@ -39,6 +39,8 @@ bool initializeComponentTest();
 
 bool gettingComponentNameTest();
 
+bool isSingularComponentTest();
+
 bool entityGUIDTest();
 
 bool referencesTest();

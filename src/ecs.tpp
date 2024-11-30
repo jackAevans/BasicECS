@@ -83,7 +83,7 @@ namespace BasicECS{
             .name = name
         };
 
-        bool isTrivial = std::is_trivial<T>();
+        bool isTrivial = std::is_trivially_copyable<T>();
 
         if(componentFunctions.serializeFunc != nullptr){
             componentType.serializeFunc = componentFunctions.serializeFunc;
@@ -201,13 +201,36 @@ namespace BasicECS{
         return getComponent<T>(entityManager.entityGUIDToEntityID.at(reference.entityGUID));
     }
 
-    template <typename T> void ECS::forEach(std::function<void(T &t)> routine){
+    template <typename T> T& ECS::getComponent(){
+        if(isSingular<T>() == false){
+            std::cerr << "ERROR: component is not singular so entity needs to be specified\n";
+        }
         TypeID typeId = getTypeID<T>();
 
         ComponentType *componentType = getComponentType(typeId);
 
-        void* componentArrLocation = componentType->arrayLocation;
-        std::vector<T>* componentArr = static_cast<std::vector<T>*>(componentArrLocation);
+        return getComponent<T>(componentType->entitiesUsingThis.at(0));
+    }
+
+    template <typename T> bool ECS::isSingular(){
+        TypeID typeId = getTypeID<T>();
+        if(componentTypeExists(typeId) == false){return false;}
+        ComponentType *componentType = getComponentType(typeId);
+        std::vector<T>* componentArr = static_cast<std::vector<T>*>(componentType->arrayLocation);
+
+        int componentAmount = componentArr->size() - componentType->tombstoneComponents.size();
+
+        if(componentAmount == 1){
+            return true;
+        }
+        return false;
+    }
+
+    template <typename T> void ECS::forEach(std::function<void(T &t)> routine){
+        TypeID typeId = getTypeID<T>();
+        if(componentTypeExists(typeId) == false){return;}
+        ComponentType *componentType = getComponentType(typeId);
+        std::vector<T>* componentArr = static_cast<std::vector<T>*>(componentType->arrayLocation);
 
         std::size_t currentNextTombstoneIndex = 0;
         std::size_t currentNextTombstone = 0;
@@ -229,6 +252,7 @@ namespace BasicECS{
     }
     template <typename T> void ECS::forEach(std::function<void(T &t, EntityID entityID)> routine){
         TypeID typeId = getTypeID<T>();
+        if(componentTypeExists(typeId) == false){return;}
         ComponentType *componentType = getComponentType(typeId);
         std::vector<T>* componentArr = static_cast<std::vector<T>*>(componentType->arrayLocation);
 
@@ -243,10 +267,12 @@ namespace BasicECS{
 
     template <typename T1, typename T2> void ECS::forEach(std::function<void(T1 &t1, T2 &t2)> routine){
         TypeID typeId1 = getTypeID<T1>();
+        if(componentTypeExists(typeId1) == false){return;}
         ComponentType *componentType1 = getComponentType(typeId1);
         std::vector<T1>* component1Arr = static_cast<std::vector<T1>*>(componentType1->arrayLocation);
 
         TypeID typeId2 = getTypeID<T2>();
+        if(componentTypeExists(typeId2) == false){return;}
         ComponentType *componentType2 = getComponentType(typeId2);
         std::vector<T2>* component2Arr = static_cast<std::vector<T2>*>(componentType2->arrayLocation);
 
@@ -267,10 +293,12 @@ namespace BasicECS{
 
     template <typename T1, typename T2> void ECS::forEach(std::function<void(T1 &t1, T2 &t2, EntityID entityID)> routine){
         TypeID typeId1 = getTypeID<T1>();
+        if(componentTypeExists(typeId1) == false){return;}
         ComponentType *componentType1 = getComponentType(typeId1);
         std::vector<T1>* component1Arr = static_cast<std::vector<T1>*>(componentType1->arrayLocation);
 
         TypeID typeId2 = getTypeID<T2>();
+        if(componentTypeExists(typeId2) == false){return;}
         ComponentType *componentType2 = getComponentType(typeId2);
         std::vector<T2>* component2Arr = static_cast<std::vector<T2>*>(componentType2->arrayLocation);
 

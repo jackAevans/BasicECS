@@ -10,6 +10,7 @@ int main() {
     LOG_TEST_RESULT(removingComponentTest);
     LOG_TEST_RESULT(initializeComponentTest);
     LOG_TEST_RESULT(gettingComponentNameTest);
+    LOG_TEST_RESULT(isSingularComponentTest);
     LOG_TEST_RESULT(entityGUIDTest);
     LOG_TEST_RESULT(referencesTest);
     LOG_TEST_RESULT(forEachTest);
@@ -87,7 +88,7 @@ bool addingComponentTest(){
     ecs.addEntity(entity2)
         .addComponent(Position{1,3,2.5});
 
-    Position pos = ecs.getComponent<Position>(entity2);
+    Position pos = ecs.getComponent<Position>();
 
     TEST_ASSERT(pos.x == 1 && pos.y == 3 && pos.z == 2.5);
 
@@ -180,6 +181,31 @@ bool gettingComponentNameTest(){
     ecs.addComponentType<Velocity>({});
 
     TEST_ASSERT(ecs.getTypeID("Velocity") == BasicECS::ECS::getTypeID<Velocity>());
+
+    return true;
+}
+
+bool isSingularComponentTest(){
+    BasicECS::ECS ecs;
+
+    ecs.addComponentType<Velocity>({});
+
+    TEST_ASSERT(ecs.isSingular<Velocity>() == false);
+
+    BasicECS::EntityID entity1;
+    ecs.addEntity(entity1)
+        .addComponent(Velocity{2,2,3});
+
+    TEST_ASSERT(ecs.isSingular<Velocity>() == true);
+
+    ecs.addEntity()
+        .addComponent(Velocity{2,2,3});
+
+    TEST_ASSERT(ecs.isSingular<Velocity>() == false);
+
+    ecs.removeComponent<Velocity>(entity1);
+
+    TEST_ASSERT(ecs.isSingular<Velocity>() == true);
 
     return true;
 }

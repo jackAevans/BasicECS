@@ -169,6 +169,19 @@ namespace BasicECS{
          */
         template <typename T> T& getComponent(EntityID entityID);
         /**
+         * @brief Gets the only instance of this component
+         * @tparam T Component type to get 
+         * @return A reference to the requested component 
+         */
+        template <typename T> T& getComponent();
+        /**
+         * @brief Checks if there is only one instance of the component
+         * @tparam T Component type to check 
+         * @return If component type is singular
+         */
+        template <typename T> bool isSingular();
+
+        /**
          * @brief Gets a component from an reference
          * @tparam T Component type to get
          * @param reference The reference to get the component from 
@@ -303,6 +316,8 @@ namespace BasicECS{
         void removeComponent(EntityID entityID, TypeID typeId);
 
         void addComponent(EntityID entityID, EntityID parentEntityID, TypeID typeId);
+
+        bool componentTypeExists(TypeID typeId);
 
         void runAllComponentDeinitializes(ComponentType *componentType, TypeID typeId);
 
